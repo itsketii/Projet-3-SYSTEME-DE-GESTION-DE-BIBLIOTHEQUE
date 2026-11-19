@@ -3,6 +3,9 @@ import sqlite3
 from datetime import date, timedelta
 
 
+from app.models.entites import Livre, Etudiant
+
+
 class DepotSQLite:
     """La (seule) classe du projet qui parle à la base de données."""
 
@@ -86,5 +89,54 @@ class DepotSQLite:
         self.connexion.executemany(
             "INSERT INTO etudiants (matricule, nom, fin_abonnement) VALUES (?, ?, ?)",
             etudiants,
+        )
+        self.connexion.commit()
+
+    # ---------- LIVRES ----------
+
+    def chercher_livres(self, mot_cle):
+        modele = f"%{mot_cle}%"
+        lignes = self.connexion.execute(
+            "SELECT code, titre, auteur, annee, prix FROM livres "
+            "WHERE titre LIKE ? OR auteur LIKE ? ORDER BY code",
+            (modele, modele),
+        ).fetchall()
+        return [Livre(*ligne) for ligne in lignes]
+
+    def trouver_livre(self, code):
+        ligne = self.connexion.execute(
+            "SELECT code, titre, auteur, annee, prix FROM livres WHERE code = ?",
+            (code,),
+        ).fetchone()
+        if ligne is None:
+            return None
+        return Livre(*ligne)
+
+    # ---------- ETUDIANTS ----------
+
+    def trouver_etudiant(self, matricule):
+        ligne = self.connexion.execute(
+            "SELECT matricule, nom, fin_abonnement FROM etudiants WHERE matricule = ?",
+            (matricule,),
+        ).fetchone()
+        if ligne is None:
+            return None
+        return Etudiant(ligne[0], ligne[1], date.fromisoformat(ligne[2]))
+
+    def ajouter_etudiant(self, etudiant):
+        self.connexion.execute(
+            "INSERT INTO etudiants (matricule, nom, fin_abonnement) VALUES (?, ?, ?)",
+            (etudiant.matricule, etudiant.nom, etudiant.fin_abonnement.isoformat()),
+        )
+        self.connexion.commit()
+
+    def prochain_matricule(self):
+        nb = self.connexion.execute("SELECT COUNT(*) FROM etudiants").fetchone()[0]
+        return f"IIT-{nb + 1:03d}"
+
+    def mettre_a_jour_abonnement(self, matricule, nouvelle_fin):
+        self.connexion.execute(
+            "UPDATE etudiants SET fin_abonnement = ? WHERE matricule = ?",
+            (nouvelle_fin.isoformat(), matricule),
         )
         self.connexion.commit()
