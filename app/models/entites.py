@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from datetime import date
 
 
 @dataclass
@@ -15,18 +15,18 @@ class Livre:
 class Etudiant:
     matricule: str
     nom: str
-    fin_abonnement: str
+    fin_abonnement: date
 
 
 @dataclass
 class Emprunt:
     code_livre: str
     matricule: str
-    date_emprunt: str
-    date_limite: str
-    date_retour: Optional[str] = None
-    etat_retour: Optional[str] = None
-    id: Optional[int] = None
+    date_emprunt: date
+    date_limite: date
+    date_retour: date | None = None
+    etat_retour: str | None = None
+    id: int | None = None
 
 
 @dataclass
@@ -36,13 +36,13 @@ class Penalite:
     montant: int
     motif: str
     payee: bool = False
-    id: Optional[int] = None
+    id: int | None = None
 
 
 @dataclass
 class Paiement:
     matricule: str
-    motif: str
+    motif: str  
     montant: int
-    date: str
-    id: Optional[int] = None
+    date: date
+    id: int | None = None
