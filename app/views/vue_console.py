@@ -191,3 +191,39 @@ class VueConsole:
         mode, montant_remis = self._demander_paiement()
         ok, message = self.controleur.renouveler_abonnement(matricule, mode, montant_remis)
         print("\n" + message)
+
+    # ---------- OPTION 6 : PAIEMENTS ----------
+
+    def paiements(self):
+        while True:
+            print("\n--- PAIEMENTS ---")
+            print("1. Régler les pénalités d'un étudiant")
+            print("2. Historique des paiements d'un étudiant")
+            print("3. Caisse (total encaissé)")
+            print("0. Retour")
+            choix = self._demander_entier("Votre choix : ", 0, 3)
+
+            if choix == 1:
+                self._regler_penalites()
+            elif choix == 2:
+                self._historique()
+            elif choix == 3:
+                print("\n" + self.controleur.total_caisse())
+            else:
+                return
+
+    def _regler_penalites(self):
+        matricule = self._demander("Matricule de l'étudiant : ")
+        ok, liste = self.controleur.lister_penalites(matricule)
+        print("\n" + liste)
+        if not ok:
+            return
+
+        mode, montant_remis = self._demander_paiement()
+        ok, message = self.controleur.regler_penalites(matricule, mode, montant_remis)
+        print("\n" + message)
+
+    def _historique(self):
+        matricule = self._demander("Matricule de l'étudiant : ")
+        ok, texte = self.controleur.historique_paiements(matricule)
+        print("\n" + texte)
