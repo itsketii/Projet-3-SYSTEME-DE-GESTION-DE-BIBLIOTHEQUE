@@ -45,4 +45,5 @@ class Paiement:
     motif: str  
     montant: int
     date: date
+    mode: str 
     id: int | None = None

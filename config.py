@@ -10,3 +10,6 @@ POURCENTAGE_PERDU = 100          # % du prix du livre si perdu ou détruit
 PRIX_ABONNEMENT = 5000           # en FCFA
 DUREE_ABONNEMENT_JOURS = 365     # un an
 PRIX_EMPRUNT_OCCASIONNEL = 500   # en FCFA, pour emprunter sans abonnement valide
+
+MODE_ESPECES = "Espèces"
+MODES_PAIEMENT = [MODE_ESPECES, "Carte bancaire", "Wave", "Orange Money", "MTN Money", "Moov Money"]
