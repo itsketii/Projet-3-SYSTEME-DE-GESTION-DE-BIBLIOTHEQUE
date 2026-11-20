@@ -71,34 +71,61 @@ class VueConsole:
             else:
                 print("Choix invalide.")
 
+        # ---------- OPTION 1 : RECHERCHER UN LIVRE ----------
+
     def rechercher(self):
         mot_cle = self._demander("Mot-clé (titre ou auteur) : ")
         resultats = self.controleur.rechercher_livres(mot_cle)
-
         if not resultats:
             print("Aucun livre trouvé.")
             return
-
         for livre, disponible in resultats:
             statut = "Disponible" if disponible else "Indisponible"
-            print(
-                f"{livre.code} - {livre.titre} - "
-                f"{livre.auteur} ({livre.annee}) [{statut}]"
-            )
+            print(f"{livre.code} {livre.titre} - {livre.auteur} ({livre.annee}) [{statut}]")
+
+    # ---------- OPTION 4 : CONSULTER LES RETARDS ----------
 
     def retards(self):
-        retards = self.controleur.lister_retards()
-
-        if not retards:
+        liste = self.controleur.lister_retards()
+        if not liste:
             print("Aucun emprunt en retard.")
             return
-
         print("--- EMPRUNTS EN RETARD ---")
-        for livre, etudiant, date_limite, jours, montant in retards:
+        for livre, etudiant, date_limite, jours, montant in liste:
             limite = date_limite.strftime("%d/%m/%Y")
             print(
-                f"{livre.code} - {livre.titre} | "
-                f"{etudiant.nom} ({etudiant.matricule}) | "
-                f"{jours} jour(s) de retard | "
-                f"{montant} FCFA | Retour prévu le {limite}"
+                f"{livre.code} {livre.titre} | {etudiant.nom} ({etudiant.matricule}) "
+                f"| prévu le {limite} | {jours} jour(s) | {montant} FCFA"
             )
+
+        # ---------- OPTION 2 : EMPRUNTER UN LIVRE ----------
+
+    def emprunter(self):
+        code = self._demander("Code du livre : ")
+        matricule = self._demander("Matricule de l'étudiant : ")
+
+        statut, message = self.controleur.verifier_emprunt(code, matricule)
+        if statut == "refus":
+            print(message)
+            return
+
+        if statut == "abonnement_expire":
+            print(message)
+            print(f"  1. Renouveler l'abonnement ({config.PRIX_ABONNEMENT} FCFA)")
+            print(f"  2. Payer cet emprunt à l'unité ({config.PRIX_EMPRUNT_OCCASIONNEL} FCFA)")
+            print("  0. Annuler")
+            choix = self._demander_entier("Votre choix : ", 0, 2)
+            if choix == 0:
+                print("Emprunt annulé.")
+                return
+
+            mode, montant_remis = self._demander_paiement()
+            if choix == 1:
+                ok, recu = self.controleur.renouveler_abonnement(matricule, mode, montant_remis)
+            else:
+                ok, recu = self.controleur.payer_emprunt_occasionnel(matricule, mode, montant_remis)
+            print("\n" + recu)
+            if not ok:
+                return
+
+        print("\n" + self.controleur.enregistrer_emprunt(code, matricule))
