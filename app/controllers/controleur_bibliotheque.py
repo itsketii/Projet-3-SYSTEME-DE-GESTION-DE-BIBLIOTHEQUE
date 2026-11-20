@@ -29,21 +29,6 @@ class ControleurBibliotheque:
             resultats.append((livre, disponible))
         return resultats
 
-    # ---------- OPTION 4 : CONSULTER LES RETARDS ----------
-
-    def lister_retards(self):
-        """Renvoie une liste de tuples (livre, etudiant, date_limite, jours, montant)."""
-        aujourdhui = date.today()
-        retards = []
-        for emprunt in self.depot.tous_les_emprunts_en_cours():
-            if regles.est_en_retard(emprunt, aujourdhui):
-                livre = self.depot.trouver_livre(emprunt.code_livre)
-                etudiant = self.depot.trouver_etudiant(emprunt.matricule)
-                jours = regles.jours_de_retard(emprunt.date_limite, aujourdhui)
-                montant = regles.penalite_retard(jours, livre.prix)
-                retards.append((livre, etudiant, emprunt.date_limite, jours, montant))
-        return retards
-
         # ---------- OPTION 2 : EMPRUNTER UN LIVRE ----------
 
     def verifier_emprunt(self, code_livre, matricule):
@@ -188,3 +173,72 @@ class ControleurBibliotheque:
         else:
             lignes.append("Aucune pénalité.")
         return True, "\n".join(lignes)
+
+    # ---------- OPTION 4 : CONSULTER LES RETARDS ----------
+    
+        def lister_retards(self):
+            """Renvoie une liste de tuples (livre, etudiant, date_limite, jours, montant)."""
+            aujourdhui = date.today()
+            retards = []
+            for emprunt in self.depot.tous_les_emprunts_en_cours():
+                if regles.est_en_retard(emprunt, aujourdhui):
+                    livre = self.depot.trouver_livre(emprunt.code_livre)
+                    etudiant = self.depot.trouver_etudiant(emprunt.matricule)
+                    jours = regles.jours_de_retard(emprunt.date_limite, aujourdhui)
+                    montant = regles.penalite_retard(jours, livre.prix)
+                    retards.append((livre, etudiant, emprunt.date_limite, jours, montant))
+            return retards
+
+        # ---------- OPTION 6 : PAIEMENTS ----------
+
+    def lister_penalites(self, matricule):
+        """Renvoie (ok, message). ok vaut False s'il n'y a rien à régler."""
+        matricule = self._normaliser(matricule)
+        if self.depot.trouver_etudiant(matricule) is None:
+            return False, f"Aucun étudiant avec le matricule {matricule}."
+
+        penalites = self.depot.penalites_impayees(matricule)
+        if not penalites:
+            return False, "Aucune pénalité à régler."
+
+        lignes = ["Pénalités à régler :"]
+        for penalite in penalites:
+            lignes.append(f"  - {MOTIFS[penalite.motif]} : {penalite.montant} FCFA")
+        total = sum(penalite.montant for penalite in penalites)
+        lignes.append(f"Total : {total} FCFA")
+        return True, "\n".join(lignes)
+
+    def regler_penalites(self, matricule, mode, montant_remis=0):
+        """Paie toutes les pénalités impayées de l'étudiant en une fois. Renvoie (ok, message)."""
+        matricule = self._normaliser(matricule)
+        penalites = self.depot.penalites_impayees(matricule)
+        if not penalites:
+            return False, "Aucune pénalité à régler."
+
+        total = sum(penalite.montant for penalite in penalites)
+        ok, message = self.encaisser(matricule, "penalite", total, mode, montant_remis)
+        if ok:
+            for penalite in penalites:
+                self.depot.marquer_penalite_payee(penalite.id)
+            message += "\nToutes les pénalités sont réglées."
+        return ok, message
+
+    def historique_paiements(self, matricule):
+        """Renvoie (ok, message)."""
+        matricule = self._normaliser(matricule)
+        if self.depot.trouver_etudiant(matricule) is None:
+            return False, f"Aucun étudiant avec le matricule {matricule}."
+
+        paiements = self.depot.paiements_de(matricule)
+        if not paiements:
+            return True, "Aucun paiement enregistré."
+        lignes = ["Historique des paiements :"]
+        for paiement in paiements:
+            jour = paiement.date.strftime("%d/%m/%Y")
+            lignes.append(f"  {jour} - {paiement.motif} - {paiement.montant} FCFA ({paiement.mode})")
+        total = sum(paiement.montant for paiement in paiements)
+        lignes.append(f"Total payé : {total} FCFA")
+        return True, "\n".join(lignes)
+
+    def total_caisse(self):
+        return f"Total encaissé par la bibliothèque : {self.depot.total_encaisse()} FCFA"
