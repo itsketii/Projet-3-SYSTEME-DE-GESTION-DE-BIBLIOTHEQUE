@@ -144,3 +144,50 @@ class VueConsole:
 
         ok, message = self.controleur.rendre_livre(code, etat)
         print("\n" + message)
+
+    # ---------- OPTION 5 : ETUDIANTS ET ABONNEMENTS ----------
+
+    def etudiants(self):
+        while True:
+            print("\n--- ÉTUDIANTS ET ABONNEMENTS ---")
+            print("1. Inscrire un nouvel étudiant")
+            print("2. Consulter la fiche d'un étudiant")
+            print("3. Renouveler un abonnement")
+            print("0. Retour")
+            choix = self._demander_entier("Votre choix : ", 0, 3)
+
+            if choix == 1:
+                self._inscrire()
+            elif choix == 2:
+                self._consulter()
+            elif choix == 3:
+                self._renouveler()
+            else:
+                return
+
+    def _inscrire(self):
+        nom = self._demander("Nom complet du nouvel étudiant : ")
+        if nom == "":
+            print("Le nom ne peut pas être vide.")
+            return
+        print(f"Abonnement d'un an : {config.PRIX_ABONNEMENT} FCFA")
+        mode, montant_remis = self._demander_paiement()
+        ok, message = self.controleur.inscrire_etudiant(nom, mode, montant_remis)
+        print("\n" + message)
+
+    def _consulter(self):
+        matricule = self._demander("Matricule de l'étudiant : ")
+        ok, fiche = self.controleur.consulter_etudiant(matricule)
+        print("\n" + fiche)
+
+    def _renouveler(self):
+        matricule = self._demander("Matricule de l'étudiant : ")
+        ok, fiche = self.controleur.consulter_etudiant(matricule)
+        print("\n" + fiche)
+        if not ok:
+            return
+
+        print(f"\nRenouvellement d'un an : {config.PRIX_ABONNEMENT} FCFA")
+        mode, montant_remis = self._demander_paiement()
+        ok, message = self.controleur.renouveler_abonnement(matricule, mode, montant_remis)
+        print("\n" + message)
