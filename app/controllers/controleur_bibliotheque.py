@@ -2,8 +2,7 @@ from datetime import date
 
 import config
 from app.models import regles
-from app.models.entites import Emprunt, Paiement, Penalite
-
+from app.models.entites import Emprunt, Etudiant, Paiement, Penalite
 
 ETATS = {"bon": "Bon état", "abime": "Abîmé", "perdu": "Perdu ou détruit"}
 MOTIFS = {"retard": "Retard", "abime": "Livre abîmé", "perdu": "Livre perdu ou détruit"}
@@ -41,7 +40,10 @@ class ControleurBibliotheque:
             return "refus", f"Impossible : aucun livre avec le code {code_livre}."
         etudiant = self.depot.trouver_etudiant(matricule)
         if etudiant is None:
-            return "refus", f"Impossible : aucun étudiant avec le matricule {matricule}."
+            return (
+                "refus",
+                f"Impossible : aucun étudiant avec le matricule {matricule}.",
+            )
 
         raison = regles.raison_de_refus(
             livre,
@@ -92,11 +94,16 @@ class ControleurBibliotheque:
         monnaie = 0
         if mode == config.MODE_ESPECES:
             if montant_remis < montant_du:
-                return False, f"Montant insuffisant : {montant_du} FCFA à payer, {montant_remis} FCFA remis."
+                return (
+                    False,
+                    f"Montant insuffisant : {montant_du} FCFA à payer, {montant_remis} FCFA remis.",
+                )
             monnaie = montant_remis - montant_du
 
         aujourdhui = date.today()
-        numero = self.depot.ajouter_paiement(Paiement(matricule, motif, montant_du, aujourdhui, mode))
+        numero = self.depot.ajouter_paiement(
+            Paiement(matricule, motif, montant_du, aujourdhui, mode)
+        )
         lignes = [
             f"--- REÇU DE PAIEMENT N° REC-{numero:04d} ---",
             f"Date : {aujourdhui.strftime('%d/%m/%Y')}",
@@ -113,18 +120,36 @@ class ControleurBibliotheque:
     def renouveler_abonnement(self, matricule, mode, montant_remis=0):
         """Renvoie (ok, message)."""
         matricule = self._normaliser(matricule)
-        ok, message = self.encaisser(matricule, "abonnement", config.PRIX_ABONNEMENT, mode, montant_remis)
+
+        etudiant = self.depot.trouver_etudiant(matricule)
+        if etudiant is None:
+            return False, f"Aucun étudiant avec le matricule {matricule}."
+
+        ok, message = self.encaisser(
+            matricule,
+            "abonnement",
+            config.PRIX_ABONNEMENT,
+            mode,
+            montant_remis,
+        )
         if ok:
-            etudiant = self.depot.trouver_etudiant(matricule)
-            nouvelle_fin = regles.calculer_fin_abonnement(etudiant.fin_abonnement, date.today())
+            nouvelle_fin = regles.calculer_fin_abonnement(
+                etudiant.fin_abonnement,
+                date.today(),
+            )
             self.depot.mettre_a_jour_abonnement(matricule, nouvelle_fin)
-            message += f"\nAbonnement valable jusqu'au {nouvelle_fin.strftime('%d/%m/%Y')}."
+            message += (
+                f"\nAbonnement valable jusqu'au "
+                f"{nouvelle_fin.strftime('%d/%m/%Y')}."
+            )
         return ok, message
 
     def payer_emprunt_occasionnel(self, matricule, mode, montant_remis=0):
         """Renvoie (ok, message)."""
         matricule = self._normaliser(matricule)
-        return self.encaisser(matricule, "emprunt", config.PRIX_EMPRUNT_OCCASIONNEL, mode, montant_remis)
+        return self.encaisser(
+            matricule, "emprunt", config.PRIX_EMPRUNT_OCCASIONNEL, mode, montant_remis
+        )
 
     # ---------- OPTION 3 : RENDRE UN LIVRE ----------
 
@@ -137,18 +162,28 @@ class ControleurBibliotheque:
 
         emprunt = self.depot.emprunt_en_cours_du_livre(code_livre)
         if emprunt is None:
-            return False, f"Le livre « {livre.titre} » n'est pas emprunté : rien à rendre."
+            return (
+                False,
+                f"Le livre « {livre.titre} » n'est pas emprunté : rien à rendre.",
+            )
         if emprunt.date_retour is not None:
-            return False, f"Le livre « {livre.titre} » est déjà déclaré perdu ou détruit."
+            return (
+                False,
+                f"Le livre « {livre.titre} » est déjà déclaré perdu ou détruit.",
+            )
 
         etudiant = self.depot.trouver_etudiant(emprunt.matricule)
         aujourdhui = date.today()
         self.depot.enregistrer_retour(emprunt.id, aujourdhui, etat)
 
-        penalites = regles.penalites_au_retour(emprunt.date_limite, aujourdhui, etat, livre.prix)
+        penalites = regles.penalites_au_retour(
+            emprunt.date_limite, aujourdhui, etat, livre.prix
+        )
         total = 0
         for motif, montant in penalites:
-            self.depot.ajouter_penalite(Penalite(emprunt.id, emprunt.matricule, montant, motif))
+            self.depot.ajouter_penalite(
+                Penalite(emprunt.id, emprunt.matricule, montant, motif)
+            )
             total += montant
 
         jours = regles.jours_de_retard(emprunt.date_limite, aujourdhui)
@@ -175,19 +210,85 @@ class ControleurBibliotheque:
         return True, "\n".join(lignes)
 
     # ---------- OPTION 4 : CONSULTER LES RETARDS ----------
-    
-        def lister_retards(self):
-            """Renvoie une liste de tuples (livre, etudiant, date_limite, jours, montant)."""
-            aujourdhui = date.today()
-            retards = []
-            for emprunt in self.depot.tous_les_emprunts_en_cours():
-                if regles.est_en_retard(emprunt, aujourdhui):
-                    livre = self.depot.trouver_livre(emprunt.code_livre)
-                    etudiant = self.depot.trouver_etudiant(emprunt.matricule)
-                    jours = regles.jours_de_retard(emprunt.date_limite, aujourdhui)
-                    montant = regles.penalite_retard(jours, livre.prix)
-                    retards.append((livre, etudiant, emprunt.date_limite, jours, montant))
-            return retards
+
+    def lister_retards(self):
+        """Renvoie une liste de tuples (livre, etudiant, date_limite, jours, montant)."""
+        aujourdhui = date.today()
+        retards = []
+        for emprunt in self.depot.tous_les_emprunts_en_cours():
+            if regles.est_en_retard(emprunt, aujourdhui):
+                livre = self.depot.trouver_livre(emprunt.code_livre)
+                etudiant = self.depot.trouver_etudiant(emprunt.matricule)
+                jours = regles.jours_de_retard(emprunt.date_limite, aujourdhui)
+                montant = regles.penalite_retard(jours, livre.prix)
+                retards.append((livre, etudiant, emprunt.date_limite, jours, montant))
+        return retards
+
+    # ---------- OPTION 5 : ETUDIANTS ET ABONNEMENTS ----------
+
+    def inscrire_etudiant(self, nom, mode, montant_remis=0):
+        """Inscrit un nouvel étudiant (premier abonnement payé). Renvoie (ok, message)."""
+        nom = nom.strip().title()
+        if nom == "":
+            return False, "Le nom ne peut pas être vide."
+
+        matricule = self.depot.prochain_matricule()
+        # On encaisse d'abord : si le paiement échoue, l'étudiant n'est pas créé
+        ok, recu = self.encaisser(
+            matricule, "abonnement", config.PRIX_ABONNEMENT, mode, montant_remis
+        )
+        if not ok:
+            return False, recu
+
+        aujourdhui = date.today()
+        fin = regles.calculer_fin_abonnement(aujourdhui, aujourdhui)
+        self.depot.ajouter_etudiant(Etudiant(matricule, nom, fin))
+        return True, (
+            f"Inscription réussie : {nom}, matricule {matricule}.\n\n"
+            f"{recu}\n"
+            f"Abonnement valable jusqu'au {fin.strftime('%d/%m/%Y')}."
+        )
+
+    def consulter_etudiant(self, matricule):
+        """Renvoie (ok, fiche de l'étudiant)."""
+        matricule = self._normaliser(matricule)
+        etudiant = self.depot.trouver_etudiant(matricule)
+        if etudiant is None:
+            return False, f"Aucun étudiant avec le matricule {matricule}."
+
+        aujourdhui = date.today()
+        fin = etudiant.fin_abonnement.strftime("%d/%m/%Y")
+        if regles.abonnement_valide(etudiant.fin_abonnement, aujourdhui):
+            abonnement = f"valide jusqu'au {fin}"
+        else:
+            abonnement = f"EXPIRÉ depuis le {fin}"
+        lignes = [
+            f"Étudiant : {etudiant.nom} ({etudiant.matricule})",
+            f"Abonnement : {abonnement}",
+        ]
+
+        emprunts = self.depot.emprunts_en_cours_de(matricule)
+        if emprunts:
+            lignes.append("Livres empruntés :")
+            for emprunt in emprunts:
+                livre = self.depot.trouver_livre(emprunt.code_livre)
+                retour = emprunt.date_limite.strftime("%d/%m/%Y")
+                note = (
+                    " (EN RETARD)" if regles.est_en_retard(emprunt, aujourdhui) else ""
+                )
+                lignes.append(
+                    f"  - {livre.code} {livre.titre}, à rendre le {retour}{note}"
+                )
+        else:
+            lignes.append("Aucun livre emprunté.")
+
+        penalites = self.depot.penalites_impayees(matricule)
+        if penalites:
+            total = sum(penalite.montant for penalite in penalites)
+            lignes.append(f"Pénalités impayées : {total} FCFA")
+        else:
+            lignes.append("Aucune pénalité impayée.")
+        return True, "\n".join(lignes)
 
         # ---------- OPTION 6 : PAIEMENTS ----------
 
@@ -235,10 +336,14 @@ class ControleurBibliotheque:
         lignes = ["Historique des paiements :"]
         for paiement in paiements:
             jour = paiement.date.strftime("%d/%m/%Y")
-            lignes.append(f"  {jour} - {paiement.motif} - {paiement.montant} FCFA ({paiement.mode})")
+            lignes.append(
+                f"  {jour} - {paiement.motif} - {paiement.montant} FCFA ({paiement.mode})"
+            )
         total = sum(paiement.montant for paiement in paiements)
         lignes.append(f"Total payé : {total} FCFA")
         return True, "\n".join(lignes)
 
     def total_caisse(self):
-        return f"Total encaissé par la bibliothèque : {self.depot.total_encaisse()} FCFA"
+        return (
+            f"Total encaissé par la bibliothèque : {self.depot.total_encaisse()} FCFA"
+        )
