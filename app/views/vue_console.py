@@ -71,7 +71,7 @@ class VueConsole:
             else:
                 print("Choix invalide.")
 
-        # ---------- OPTION 1 : RECHERCHER UN LIVRE ----------
+    # ---------- OPTION 1 : RECHERCHER UN LIVRE ----------
 
     def rechercher(self):
         mot_cle = self._demander("Mot-clé (titre ou auteur) : ")
@@ -98,7 +98,8 @@ class VueConsole:
                 f"| prévu le {limite} | {jours} jour(s) | {montant} FCFA"
             )
 
-        # ---------- OPTION 2 : EMPRUNTER UN LIVRE ----------
+           
+    # ---------- OPTION 2 : EMPRUNTER UN LIVRE ----------
 
     def emprunter(self):
         code = self._demander("Code du livre : ")
@@ -129,3 +130,17 @@ class VueConsole:
                 return
 
         print("\n" + self.controleur.enregistrer_emprunt(code, matricule))
+
+    # ---------- OPTION 3 : RENDRE UN LIVRE ----------
+
+    def rendre(self):
+        code = self._demander("Code du livre rendu : ")
+        print("État du livre :")
+        print("  1. Bon état")
+        print("  2. Abîmé")
+        print("  3. Perdu ou détruit")
+        choix = self._demander_entier("Votre choix : ", 1, 3)
+        etat = ["bon", "abime", "perdu"][choix - 1]
+
+        ok, message = self.controleur.rendre_livre(code, etat)
+        print("\n" + message)
