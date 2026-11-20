@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 
 from app.models.entites import Livre, Etudiant
+from app.models.entites import Livre, Etudiant, Emprunt, Penalite, Paiement
 
 
 class DepotSQLite:
@@ -140,3 +141,123 @@ class DepotSQLite:
             (nouvelle_fin.isoformat(), matricule),
         )
         self.connexion.commit()
+
+    
+    # ---------- EMPRUNTS ----------
+
+    def _emprunt_depuis_ligne(self, ligne):
+        return Emprunt(
+            code_livre=ligne[1],
+            matricule=ligne[2],
+            date_emprunt=date.fromisoformat(ligne[3]),
+            date_limite=date.fromisoformat(ligne[4]),
+            date_retour=date.fromisoformat(ligne[5]) if ligne[5] else None,
+            etat_retour=ligne[6],
+            id=ligne[0],
+        )
+
+    def ajouter_emprunt(self, emprunt):
+        curseur = self.connexion.execute(
+            "INSERT INTO emprunts (code_livre, matricule, date_emprunt, date_limite) "
+            "VALUES (?, ?, ?, ?)",
+            (
+                emprunt.code_livre,
+                emprunt.matricule,
+                emprunt.date_emprunt.isoformat(),
+                emprunt.date_limite.isoformat(),
+            ),
+        )
+        self.connexion.commit()
+        return curseur.lastrowid
+
+    def emprunt_en_cours_du_livre(self, code_livre):
+        ligne = self.connexion.execute(
+            "SELECT id, code_livre, matricule, date_emprunt, date_limite, date_retour, etat_retour "
+            "FROM emprunts WHERE code_livre = ? AND date_retour IS NULL",
+            (code_livre,),
+        ).fetchone()
+        if ligne is None:
+            return None
+        return self._emprunt_depuis_ligne(ligne)
+
+    def emprunts_en_cours_de(self, matricule):
+        lignes = self.connexion.execute(
+            "SELECT id, code_livre, matricule, date_emprunt, date_limite, date_retour, etat_retour "
+            "FROM emprunts WHERE matricule = ? AND date_retour IS NULL",
+            (matricule,),
+        ).fetchall()
+        return [self._emprunt_depuis_ligne(ligne) for ligne in lignes]
+
+    def tous_les_emprunts_en_cours(self):
+        lignes = self.connexion.execute(
+            "SELECT id, code_livre, matricule, date_emprunt, date_limite, date_retour, etat_retour "
+            "FROM emprunts WHERE date_retour IS NULL ORDER BY date_limite"
+        ).fetchall()
+        return [self._emprunt_depuis_ligne(ligne) for ligne in lignes]
+
+    def enregistrer_retour(self, id_emprunt, date_retour, etat):
+        self.connexion.execute(
+            "UPDATE emprunts SET date_retour = ?, etat_retour = ? WHERE id = ?",
+            (date_retour.isoformat(), etat, id_emprunt),
+        )
+        self.connexion.commit()
+
+    # ---------- PENALITES ----------
+
+    def _penalite_depuis_ligne(self, ligne):
+        return Penalite(
+            id_emprunt=ligne[1],
+            matricule=ligne[2],
+            montant=ligne[3],
+            motif=ligne[4],
+            payee=bool(ligne[5]),
+            id=ligne[0],
+        )
+
+    def ajouter_penalite(self, penalite):
+        self.connexion.execute(
+            "INSERT INTO penalites (id_emprunt, matricule, montant, motif) "
+            "VALUES (?, ?, ?, ?)",
+            (penalite.id_emprunt, penalite.matricule, penalite.montant, penalite.motif),
+        )
+        self.connexion.commit()
+
+    def penalites_impayees(self, matricule):
+        lignes = self.connexion.execute(
+            "SELECT id, id_emprunt, matricule, montant, motif, payee "
+            "FROM penalites WHERE matricule = ? AND payee = 0",
+            (matricule,),
+        ).fetchall()
+        return [self._penalite_depuis_ligne(ligne) for ligne in lignes]
+
+    def marquer_penalite_payee(self, id_penalite):
+        self.connexion.execute(
+            "UPDATE penalites SET payee = 1 WHERE id = ?",
+            (id_penalite,),
+        )
+        self.connexion.commit()
+
+    # ---------- PAIEMENTS ----------
+
+    def ajouter_paiement(self, paiement):
+        self.connexion.execute(
+            "INSERT INTO paiements (matricule, motif, montant, date) VALUES (?, ?, ?, ?)",
+            (paiement.matricule, paiement.motif, paiement.montant, paiement.date.isoformat()),
+        )
+        self.connexion.commit()
+
+    def paiements_de(self, matricule):
+        lignes = self.connexion.execute(
+            "SELECT id, matricule, motif, montant, date FROM paiements "
+            "WHERE matricule = ? ORDER BY date",
+            (matricule,),
+        ).fetchall()
+        return [
+            Paiement(ligne[1], ligne[2], ligne[3], date.fromisoformat(ligne[4]), ligne[0])
+            for ligne in lignes
+        ]
+
+    def total_encaisse(self):
+        return self.connexion.execute(
+            "SELECT COALESCE(SUM(montant), 0) FROM paiements"
+        ).fetchone()[0]
