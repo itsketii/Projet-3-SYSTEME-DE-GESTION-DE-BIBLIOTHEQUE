@@ -174,7 +174,7 @@ class DepotSQLite:
     def emprunt_en_cours_du_livre(self, code_livre):
         ligne = self.connexion.execute(
             "SELECT id, code_livre, matricule, date_emprunt, date_limite, date_retour, etat_retour "
-            "FROM emprunts WHERE code_livre = ? AND date_retour IS NULL",
+            "FROM emprunts WHERE code_livre = ? AND (date_retour IS NULL OR etat_retour = 'perdu')",
             (code_livre,),
         ).fetchone()
         if ligne is None:

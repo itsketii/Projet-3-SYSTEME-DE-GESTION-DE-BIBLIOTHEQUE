@@ -2,7 +2,11 @@ from datetime import date
 
 import config
 from app.models import regles
-from app.models.entites import Emprunt, Paiement
+from app.models.entites import Emprunt, Paiement, Penalite
+
+
+ETATS = {"bon": "Bon état", "abime": "Abîmé", "perdu": "Perdu ou détruit"}
+MOTIFS = {"retard": "Retard", "abime": "Livre abîmé", "perdu": "Livre perdu ou détruit"}
 
 
 class ControleurBibliotheque:
@@ -136,3 +140,51 @@ class ControleurBibliotheque:
         """Renvoie (ok, message)."""
         matricule = self._normaliser(matricule)
         return self.encaisser(matricule, "emprunt", config.PRIX_EMPRUNT_OCCASIONNEL, mode, montant_remis)
+
+    # ---------- OPTION 3 : RENDRE UN LIVRE ----------
+
+    def rendre_livre(self, code_livre, etat):
+        """etat : "bon", "abime" ou "perdu". Renvoie (ok, message)."""
+        code_livre = self._normaliser(code_livre)
+        livre = self.depot.trouver_livre(code_livre)
+        if livre is None:
+            return False, f"Impossible : aucun livre avec le code {code_livre}."
+
+        emprunt = self.depot.emprunt_en_cours_du_livre(code_livre)
+        if emprunt is None:
+            return False, f"Le livre « {livre.titre} » n'est pas emprunté : rien à rendre."
+        if emprunt.date_retour is not None:
+            return False, f"Le livre « {livre.titre} » est déjà déclaré perdu ou détruit."
+
+        etudiant = self.depot.trouver_etudiant(emprunt.matricule)
+        aujourdhui = date.today()
+        self.depot.enregistrer_retour(emprunt.id, aujourdhui, etat)
+
+        penalites = regles.penalites_au_retour(emprunt.date_limite, aujourdhui, etat, livre.prix)
+        total = 0
+        for motif, montant in penalites:
+            self.depot.ajouter_penalite(Penalite(emprunt.id, emprunt.matricule, montant, motif))
+            total += montant
+
+        jours = regles.jours_de_retard(emprunt.date_limite, aujourdhui)
+        lignes = [
+            f"Retour enregistré : « {livre.titre} ».",
+            "",
+            f"--- REÇU DE RETOUR N° RET-{emprunt.id:04d} ---",
+            f"Date : {aujourdhui.strftime('%d/%m/%Y')}",
+            f"Étudiant : {etudiant.nom} ({etudiant.matricule})",
+            f"Livre : {livre.code} - {livre.titre}",
+            f"Emprunté le : {emprunt.date_emprunt.strftime('%d/%m/%Y')}",
+            f"À rendre avant le : {emprunt.date_limite.strftime('%d/%m/%Y')}",
+            f"État du livre : {ETATS[etat]}",
+        ]
+        if jours > 0 and etat != "perdu":
+            lignes.append(f"Jours de retard : {jours}")
+        if penalites:
+            lignes.append("Pénalités à régler :")
+            for motif, montant in penalites:
+                lignes.append(f"  - {MOTIFS[motif]} : {montant} FCFA")
+            lignes.append(f"Total à régler : {total} FCFA (menu Paiements)")
+        else:
+            lignes.append("Aucune pénalité.")
+        return True, "\n".join(lignes)

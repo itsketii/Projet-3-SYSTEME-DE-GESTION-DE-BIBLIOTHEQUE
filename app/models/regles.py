@@ -56,6 +56,8 @@ def penalites_au_retour(date_limite, date_retour, etat, prix_livre):
 def raison_de_refus(livre, emprunt_en_cours_du_livre, nb_emprunts_etudiant, a_des_penalites):
     """Renvoie le message de refus, ou None si l'emprunt est autorisé."""
     if emprunt_en_cours_du_livre is not None:
+        if emprunt_en_cours_du_livre.etat_retour == "perdu":
+            return f"Impossible : Le livre « {livre.titre} » est perdu ou détruit."
         return f"Impossible : Le livre « {livre.titre} » est déjà emprunté."
     if nb_emprunts_etudiant >= config.LIMITE_EMPRUNTS:
         return f"Impossible : limite de {config.LIMITE_EMPRUNTS} livres empruntés atteinte."
