@@ -70,3 +70,35 @@ class VueConsole:
                 break
             else:
                 print("Choix invalide.")
+
+    def rechercher(self):
+        mot_cle = self._demander("Mot-clé (titre ou auteur) : ")
+        resultats = self.controleur.rechercher_livres(mot_cle)
+
+        if not resultats:
+            print("Aucun livre trouvé.")
+            return
+
+        for livre, disponible in resultats:
+            statut = "Disponible" if disponible else "Indisponible"
+            print(
+                f"{livre.code} - {livre.titre} - "
+                f"{livre.auteur} ({livre.annee}) [{statut}]"
+            )
+
+    def retards(self):
+        retards = self.controleur.lister_retards()
+
+        if not retards:
+            print("Aucun emprunt en retard.")
+            return
+
+        print("--- EMPRUNTS EN RETARD ---")
+        for livre, etudiant, date_limite, jours, montant in retards:
+            limite = date_limite.strftime("%d/%m/%Y")
+            print(
+                f"{livre.code} - {livre.titre} | "
+                f"{etudiant.nom} ({etudiant.matricule}) | "
+                f"{jours} jour(s) de retard | "
+                f"{montant} FCFA | Retour prévu le {limite}"
+            )
