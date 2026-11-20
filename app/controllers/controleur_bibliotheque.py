@@ -43,7 +43,7 @@ class ControleurBibliotheque:
         # ---------- OPTION 2 : EMPRUNTER UN LIVRE ----------
 
     def verifier_emprunt(self, code_livre, matricule):
-        """Renvoie (statut, message). Statut : "refus", "paiement_requis" ou "ok"."""
+        """Renvoie (statut, message). Statut : "refus", "abonnement_expire" ou "ok"."""
         code_livre = self._normaliser(code_livre)
         matricule = self._normaliser(matricule)
 
@@ -65,7 +65,10 @@ class ControleurBibliotheque:
 
         if not regles.abonnement_valide(etudiant.fin_abonnement, date.today()):
             fin = etudiant.fin_abonnement.strftime("%d/%m/%Y")
-            return "paiement_requis", f"Abonnement expiré depuis le {fin}."
+            return "abonnement_expire", (
+                f"Votre abonnement a expiré le {fin}. "
+                "Veuillez le renouveler ou payer cet emprunt à l'unité."
+            )
         return "ok", ""
 
     def enregistrer_emprunt(self, code_livre, matricule):
@@ -77,33 +80,51 @@ class ControleurBibliotheque:
             aujourdhui,
             regles.calculer_date_limite(aujourdhui),
         )
-        self.depot.ajouter_emprunt(emprunt)
-        return f"Emprunt enregistré. Retour prévu le {emprunt.date_limite.strftime('%d/%m/%Y')}."
+        numero = self.depot.ajouter_emprunt(emprunt)
+
+        livre = self.depot.trouver_livre(emprunt.code_livre)
+        etudiant = self.depot.trouver_etudiant(emprunt.matricule)
+        limite = emprunt.date_limite.strftime("%d/%m/%Y")
+        lignes = [
+            f"Emprunt enregistré. Retour prévu le {limite}.",
+            "",
+            f"--- REÇU D'EMPRUNT N° EMP-{numero:04d} ---",
+            f"Date : {aujourdhui.strftime('%d/%m/%Y')}",
+            f"Étudiant : {etudiant.nom} ({etudiant.matricule})",
+            f"Livre : {livre.code} - {livre.titre}",
+            f"À rendre avant le : {limite}",
+        ]
+        return "\n".join(lignes)
 
     # ---------- PAIEMENTS (réutilisés par plusieurs options) ----------
 
-    def encaisser(self, matricule, motif, montant_du, montant_remis):
+    def encaisser(self, matricule, motif, montant_du, mode, montant_remis=0):
         """Enregistre un paiement. Renvoie (ok, message) : un reçu, ou la raison de l'échec."""
-        if montant_remis < montant_du:
-            return False, f"Montant insuffisant : {montant_du} FCFA à payer, {montant_remis} FCFA remis."
+        monnaie = 0
+        if mode == config.MODE_ESPECES:
+            if montant_remis < montant_du:
+                return False, f"Montant insuffisant : {montant_du} FCFA à payer, {montant_remis} FCFA remis."
+            monnaie = montant_remis - montant_du
 
         aujourdhui = date.today()
-        self.depot.ajouter_paiement(Paiement(matricule, motif, montant_du, aujourdhui))
-        monnaie = montant_remis - montant_du
-        recu = (
-            "--- REÇU ---\n"
-            f"Date : {aujourdhui.strftime('%d/%m/%Y')}\n"
-            f"Étudiant : {matricule}\n"
-            f"Motif : {motif}\n"
-            f"Montant payé : {montant_du} FCFA\n"
-            f"Monnaie rendue : {monnaie} FCFA"
-        )
-        return True, recu
+        numero = self.depot.ajouter_paiement(Paiement(matricule, motif, montant_du, aujourdhui, mode))
+        lignes = [
+            f"--- REÇU DE PAIEMENT N° REC-{numero:04d} ---",
+            f"Date : {aujourdhui.strftime('%d/%m/%Y')}",
+            f"Étudiant : {matricule}",
+            f"Motif : {motif}",
+            f"Mode de paiement : {mode}",
+            f"Montant payé : {montant_du} FCFA",
+        ]
+        if mode == config.MODE_ESPECES:
+            lignes.append(f"Montant remis : {montant_remis} FCFA")
+            lignes.append(f"Monnaie rendue : {monnaie} FCFA")
+        return True, "\n".join(lignes)
 
-    def renouveler_abonnement(self, matricule, montant_remis):
+    def renouveler_abonnement(self, matricule, mode, montant_remis=0):
         """Renvoie (ok, message)."""
         matricule = self._normaliser(matricule)
-        ok, message = self.encaisser(matricule, "abonnement", config.PRIX_ABONNEMENT, montant_remis)
+        ok, message = self.encaisser(matricule, "abonnement", config.PRIX_ABONNEMENT, mode, montant_remis)
         if ok:
             etudiant = self.depot.trouver_etudiant(matricule)
             nouvelle_fin = regles.calculer_fin_abonnement(etudiant.fin_abonnement, date.today())
@@ -111,7 +132,7 @@ class ControleurBibliotheque:
             message += f"\nAbonnement valable jusqu'au {nouvelle_fin.strftime('%d/%m/%Y')}."
         return ok, message
 
-    def payer_emprunt_occasionnel(self, matricule, montant_remis):
+    def payer_emprunt_occasionnel(self, matricule, mode, montant_remis=0):
         """Renvoie (ok, message)."""
         matricule = self._normaliser(matricule)
-        return self.encaisser(matricule, "emprunt", config.PRIX_EMPRUNT_OCCASIONNEL, montant_remis)
+        return self.encaisser(matricule, "emprunt", config.PRIX_EMPRUNT_OCCASIONNEL, mode, montant_remis)

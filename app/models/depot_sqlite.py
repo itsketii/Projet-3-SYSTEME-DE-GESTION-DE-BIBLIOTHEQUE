@@ -54,7 +54,8 @@ class DepotSQLite:
                 matricule  TEXT NOT NULL REFERENCES etudiants(matricule),
                 motif      TEXT NOT NULL,
                 montant    INTEGER NOT NULL,
-                date       TEXT NOT NULL
+                date       TEXT NOT NULL,
+                mode       TEXT NOT NULL
             );
         """)
         self.connexion.commit()
@@ -240,15 +241,22 @@ class DepotSQLite:
     # ---------- PAIEMENTS ----------
 
     def ajouter_paiement(self, paiement):
-        self.connexion.execute(
-            "INSERT INTO paiements (matricule, motif, montant, date) VALUES (?, ?, ?, ?)",
-            (paiement.matricule, paiement.motif, paiement.montant, paiement.date.isoformat()),
+        curseur = self.connexion.execute(
+            "INSERT INTO paiements (matricule, motif, montant, date, mode) VALUES (?, ?, ?, ?, ?)",
+            (
+                paiement.matricule,
+                paiement.motif,
+                paiement.montant,
+                paiement.date.isoformat(),
+                paiement.mode,
+            ),
         )
         self.connexion.commit()
+        return curseur.lastrowid
 
     def paiements_de(self, matricule):
         lignes = self.connexion.execute(
-            "SELECT id, matricule, motif, montant, date FROM paiements "
+            "SELECT id, matricule, motif, montant, date, mode FROM paiements "
             "WHERE matricule = ? ORDER BY date",
             (matricule,),
         ).fetchall()
