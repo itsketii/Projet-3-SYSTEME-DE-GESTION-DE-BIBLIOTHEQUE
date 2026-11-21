@@ -4,7 +4,7 @@ from app.views.vue_console import VueConsole
 
 
 def main():
-    depot = DepotSQLite("data/bibliotheque.db")
+    depot = DepotSQLite()
     controleur = ControleurBibliotheque(depot)
     vue = VueConsole(controleur)
     vue.lancer()

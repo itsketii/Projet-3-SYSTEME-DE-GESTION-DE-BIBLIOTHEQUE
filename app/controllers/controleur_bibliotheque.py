@@ -14,6 +14,8 @@ class ControleurBibliotheque:
 
     def __init__(self, depot):
         self.depot = depot
+        # Une lecture sur place dure une journée : on clôture celles des jours précédents
+        self.depot.cloturer_lectures_avant(date.today())
 
     def _normaliser(self, texte):
         # " l002 " devient "L002" : on tolère les espaces et les minuscules
@@ -42,6 +44,11 @@ class ControleurBibliotheque:
 
         emprunt = self.depot.emprunt_en_cours_de_l_exemplaire(code_exemplaire)
         if emprunt is None:
+            if self.depot.lecture_en_cours_de(code_exemplaire) is not None:
+                return False, (
+                    f"L'exemplaire {code_exemplaire} est en lecture sur place : "
+                    "utilisez « Lecture sur place » pour le remettre en rayon."
+                )
             return False, f"L'exemplaire {code_exemplaire} de « {livre.titre} » n'est pas emprunté : rien à rendre."
         if emprunt.date_retour is not None:
             return False, f"L'exemplaire {code_exemplaire} de « {livre.titre} » est déjà déclaré perdu ou détruit."
@@ -311,6 +318,8 @@ class ControleurBibliotheque:
                 livre = self.depot.trouver_livre(exemplaire.code_livre)
                 retour = emprunt.date_limite.strftime("%d/%m/%Y")
                 note = " (EN RETARD)" if regles.est_en_retard(emprunt, aujourdhui) else ""
+                if emprunt.nb_prolongations > 0:
+                    note += " (prolongé)"
                 lignes.append(f"  - {emprunt.code_exemplaire} {livre.titre}, à rendre le {retour}{note}")
         else:
             lignes.append("Aucun livre emprunté.")
@@ -470,3 +479,70 @@ class ControleurBibliotheque:
             return False, f"Aucun étudiant avec le matricule {matricule}."
         chemin = self._enregistrer_carte(etudiant)
         return True, self._texte_carte(etudiant) + f"\nCarte enregistrée : {chemin}"
+
+    # ---------- OPTION 8 : PROLONGER UN PRÊT ----------
+
+    def prolonger_emprunt(self, code_exemplaire):
+        """Prolonge un prêt de 7 jours, avant la date limite. Renvoie (ok, message)."""
+        code_exemplaire = self._normaliser(code_exemplaire)
+        exemplaire = self.depot.trouver_exemplaire(code_exemplaire)
+        if exemplaire is None:
+            return False, f"Impossible : aucun exemplaire avec le code {code_exemplaire}."
+        livre = self.depot.trouver_livre(exemplaire.code_livre)
+
+        emprunt = self.depot.emprunt_en_cours_de_l_exemplaire(code_exemplaire)
+        if emprunt is None or emprunt.date_retour is not None:
+            return False, f"L'exemplaire {code_exemplaire} de « {livre.titre} » n'est pas emprunté."
+
+        etudiant = self.depot.trouver_etudiant(emprunt.matricule)
+        aujourdhui = date.today()
+        raison = regles.raison_de_refus_prolongation(
+            emprunt, regles.abonnement_valide(etudiant.fin_abonnement, aujourdhui), aujourdhui
+        )
+        if raison is not None:
+            return False, raison
+
+        nouvelle_limite = regles.calculer_nouvelle_limite(emprunt.date_limite)
+        self.depot.prolonger_emprunt(emprunt.id, nouvelle_limite)
+        return True, (
+            f"Prêt prolongé : « {livre.titre} » (exemplaire {code_exemplaire}), "
+            f"{etudiant.nom} ({etudiant.matricule}).\n"
+            f"Nouvelle date limite : {nouvelle_limite.strftime('%d/%m/%Y')}."
+        )
+
+    # ---------- OPTION 9 : LECTURE SUR PLACE ----------
+
+    def commencer_lecture(self, code_livre):
+        """Réserve un exemplaire pour une lecture sur place. Renvoie (ok, message)."""
+        code_livre = self._normaliser(code_livre)
+        livre = self.depot.trouver_livre(code_livre)
+        if livre is None:
+            return False, f"Impossible : aucun livre avec le code {code_livre}."
+        disponibles = self.depot.exemplaires_disponibles(code_livre)
+        if not disponibles:
+            return False, f"Impossible : Le livre « {livre.titre} » n'a plus d'exemplaire disponible."
+
+        exemplaire = disponibles[0]
+        self.depot.ajouter_lecture(exemplaire.code, date.today())
+        return True, (
+            f"Lecture sur place enregistrée : « {livre.titre} ».\n"
+            f"Exemplaire à remettre au lecteur : {exemplaire.code}\n"
+            "À remettre en rayon après la lecture (menu Lecture sur place)."
+        )
+
+    def terminer_lecture(self, code_exemplaire):
+        """Remet un exemplaire en rayon. Renvoie (ok, message)."""
+        code_exemplaire = self._normaliser(code_exemplaire)
+        if self.depot.lecture_en_cours_de(code_exemplaire) is None:
+            return False, f"L'exemplaire {code_exemplaire} n'est pas en lecture sur place."
+        self.depot.terminer_lecture(code_exemplaire, date.today())
+        return True, f"Exemplaire {code_exemplaire} remis en rayon : il est de nouveau disponible."
+
+    def lister_lectures(self):
+        """Renvoie une liste de tuples (code_exemplaire, titre)."""
+        resultats = []
+        for lecture in self.depot.lectures_en_cours():
+            exemplaire = self.depot.trouver_exemplaire(lecture.code_exemplaire)
+            livre = self.depot.trouver_livre(exemplaire.code_livre)
+            resultats.append((lecture.code_exemplaire, livre.titre))
+        return resultats

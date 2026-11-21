@@ -35,10 +35,11 @@ class Emprunt:
     code_exemplaire: str
     matricule: str
     date_emprunt: date
-    date_limite: date                   # emprunt + 14 jours
-    date_retour: date | None = None     # None tant que le livre n'est pas rendu
-    etat_retour: str | None = None      # "bon", "abime" ou "perdu"
-    id: int | None = None               # donné par la base de données
+    date_limite: date                    # emprunt + 14 jours
+    date_retour: date | None             # None tant que le livre n'est pas rendu
+    etat_retour: str | None              # "bon", "abime" ou "perdu"
+    nb_prolongations: int = 0            # nombre de fois où le prêt a été prolongé
+    id: int | None = None                # donné par la base de données
 
 
 @dataclass
@@ -58,4 +59,13 @@ class Paiement:
     montant: int
     date: date
     mode: str              # "Espèces", "Wave", "Orange Money"...
+    id: int | None = None
+
+
+@dataclass
+class Lecture:
+    """Lecture sur place : l'exemplaire est occupé, sans identifier le lecteur."""
+    code_exemplaire: str
+    date_lecture: date
+    date_fin: date | None = None  # None tant que l'exemplaire n'est pas remis en rayon
     id: int | None = None
