@@ -11,10 +11,10 @@ def abonnement_valide(fin_abonnement, aujourdhui):
     return fin_abonnement >= aujourdhui
 
 
-def calculer_fin_abonnement(fin_actuelle, aujourdhui):
+def calculer_fin_abonnement(fin_actuelle, aujourdhui, jours=config.DUREE_ABONNEMENT_JOURS):
     # Si l'abonnement court encore, on prolonge à partir de sa fin (aucun jour perdu)
     depart = max(fin_actuelle, aujourdhui)
-    return depart + timedelta(days=config.DUREE_ABONNEMENT_JOURS)
+    return depart + timedelta(days=jours)
 
 
 def est_en_retard(emprunt, aujourdhui):
@@ -83,3 +83,17 @@ def email_valide(email):
         return False
     nom, domaine = email.split("@")
     return nom != "" and "." in domaine
+
+
+def montant_abonnement_valide(montant, categorie):
+    return config.PAIEMENT_MINIMUM_ABONNEMENT <= montant <= prix_abonnement(categorie)
+
+
+def jours_pour_montant(montant, categorie):
+    """Jours d'abonnement obtenus pour un montant payé, au prorata du prix annuel."""
+    return montant * config.DUREE_ABONNEMENT_JOURS // prix_abonnement(categorie)
+
+
+def abonnement_expire_bientot(fin_abonnement, aujourdhui):
+    limite = aujourdhui + timedelta(days=config.RAPPEL_EXPIRATION_JOURS)
+    return aujourdhui <= fin_abonnement <= limite

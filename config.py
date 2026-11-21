@@ -31,3 +31,6 @@ CATEGORIES = [
     "Informatique",
     "Manuels et études",
 ]
+
+PAIEMENT_MINIMUM_ABONNEMENT = 1000   # FCFA : montant minimum pour un abonnement partiel
+RAPPEL_EXPIRATION_JOURS = 7          # prévenir les membres dont l'abonnement expire dans ce délai

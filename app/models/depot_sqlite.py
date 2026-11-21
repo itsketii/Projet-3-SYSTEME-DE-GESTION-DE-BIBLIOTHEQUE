@@ -377,3 +377,13 @@ class DepotSQLite:
             codes.append(code)
         self.connexion.commit()
         return codes
+
+    def tous_les_etudiants(self):
+        lignes = self.connexion.execute(
+            "SELECT matricule, nom, categorie, telephone, email, fin_abonnement "
+            "FROM etudiants ORDER BY fin_abonnement"
+        ).fetchall()
+        return [
+            Etudiant(ligne[0], ligne[1], ligne[2], ligne[3], ligne[4], date.fromisoformat(ligne[5]))
+            for ligne in lignes
+        ]
