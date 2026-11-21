@@ -2,7 +2,7 @@ from datetime import date
 
 import config
 from app.models import regles
-from app.models.entites import Emprunt, Etudiant, Paiement, Penalite
+from app.models.entites import Emprunt, Etudiant, Livre, Paiement, Penalite
 
 ETATS = {"bon": "Bon état", "abime": "Abîmé", "perdu": "Perdu ou détruit"}
 MOTIFS = {"retard": "Retard", "abime": "Livre abîmé", "perdu": "Livre perdu ou détruit"}
@@ -313,3 +313,47 @@ class ControleurBibliotheque:
 
     def total_caisse(self):
         return f"Total encaissé par la bibliothèque : {self.depot.total_encaisse()} FCFA"
+
+    # ---------- OPTION 7 : CATALOGUE ----------
+
+    def infos_livre(self, code_livre):
+        """Renvoie (ok, texte) : le livre et son nombre d'exemplaires."""
+        code_livre = self._normaliser(code_livre)
+        livre = self.depot.trouver_livre(code_livre)
+        if livre is None:
+            return False, f"Aucun livre avec le code {code_livre}."
+        nb = len(self.depot.exemplaires_du_livre(code_livre))
+        return True, f"{livre.code} {livre.titre} - {livre.auteur} ({nb} exemplaire(s) actuellement)"
+
+    def ajouter_livre(self, titre, auteur, annee, prix, categorie, nb_exemplaires):
+        """Ajoute un nouveau livre et ses exemplaires. Renvoie (ok, message)."""
+        titre = titre.strip()
+        auteur = auteur.strip()
+        if titre == "" or auteur == "":
+            return False, "Le titre et l'auteur ne peuvent pas être vides."
+        if categorie not in config.CATEGORIES:
+            return False, "Catégorie inconnue."
+
+        # Un livre déjà au catalogue : on ajoute plutôt des exemplaires
+        for existant in self.depot.chercher_livres(titre):
+            if existant.titre.lower() == titre.lower() and existant.auteur.lower() == auteur.lower():
+                return False, (
+                    f"Ce livre existe déjà ({existant.code}). "
+                    "Utilisez « Ajouter des exemplaires » pour en ajouter."
+                )
+
+        code = self.depot.prochain_code_livre()
+        self.depot.ajouter_livre(Livre(code, titre, auteur, annee, prix, categorie))
+        codes = self.depot.ajouter_exemplaires(code, nb_exemplaires)
+        return True, (
+            f"Livre ajouté : {code} « {titre} » ({auteur}), catégorie {categorie}.\n"
+            f"Exemplaires créés : {', '.join(codes)}"
+        )
+
+    def ajouter_exemplaires(self, code_livre, nombre):
+        """Ajoute des exemplaires à un livre existant. Renvoie (ok, message)."""
+        code_livre = self._normaliser(code_livre)
+        if self.depot.trouver_livre(code_livre) is None:
+            return False, f"Aucun livre avec le code {code_livre}."
+        codes = self.depot.ajouter_exemplaires(code_livre, nombre)
+        return True, f"Exemplaires ajoutés : {', '.join(codes)}"

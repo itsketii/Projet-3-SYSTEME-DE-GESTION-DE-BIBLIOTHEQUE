@@ -326,3 +326,30 @@ class DepotSQLite:
         return self.connexion.execute(
             "SELECT COALESCE(SUM(montant), 0) FROM paiements"
         ).fetchone()[0]
+
+    # ---------- AJOUT AU CATALOGUE ----------
+
+    def prochain_code_livre(self):
+        nb = self.connexion.execute("SELECT COUNT(*) FROM livres").fetchone()[0]
+        return f"L{nb + 1:03d}"
+
+    def ajouter_livre(self, livre):
+        self.connexion.execute(
+            "INSERT INTO livres (code, titre, auteur, annee, prix, categorie) VALUES (?, ?, ?, ?, ?, ?)",
+            (livre.code, livre.titre, livre.auteur, livre.annee, livre.prix, livre.categorie),
+        )
+        self.connexion.commit()
+
+    def ajouter_exemplaires(self, code_livre, nombre):
+        """Ajoute `nombre` exemplaires à un livre. Renvoie la liste des codes créés."""
+        deja = len(self.exemplaires_du_livre(code_livre))
+        codes = []
+        for numero in range(deja + 1, deja + nombre + 1):
+            code = f"{code_livre}-{numero:02d}"
+            self.connexion.execute(
+                "INSERT INTO exemplaires (code, code_livre) VALUES (?, ?)",
+                (code, code_livre),
+            )
+            codes.append(code)
+        self.connexion.commit()
+        return codes
