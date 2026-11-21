@@ -11,10 +11,10 @@ def abonnement_valide(fin_abonnement, aujourdhui):
     return fin_abonnement >= aujourdhui
 
 
-def calculer_fin_abonnement(fin_actuelle, aujourdhui):
+def calculer_fin_abonnement(fin_actuelle, aujourdhui, jours=config.DUREE_ABONNEMENT_JOURS):
     # Si l'abonnement court encore, on prolonge à partir de sa fin (aucun jour perdu)
     depart = max(fin_actuelle, aujourdhui)
-    return depart + timedelta(days=config.DUREE_ABONNEMENT_JOURS)
+    return depart + timedelta(days=jours)
 
 
 def est_en_retard(emprunt, aujourdhui):
@@ -56,7 +56,7 @@ def penalites_au_retour(date_limite, date_retour, etat, prix_livre):
 def raison_de_refus(livre, nb_exemplaires_disponibles, nb_emprunts_etudiant, a_des_penalites):
     """Renvoie le message de refus, ou None si l'emprunt est autorisé."""
     if nb_exemplaires_disponibles == 0:
-        return f"Impossible : Le livre « {livre.titre} » n'a plus d'exemplaire disponible (tous sont empruntés ou perdus)."
+        return f"Impossible : Le livre « {livre.titre} » n'a plus d'exemplaire disponible (tous sont empruntés, en lecture sur place ou perdus)."
     if nb_emprunts_etudiant >= config.LIMITE_EMPRUNTS:
         return f"Impossible : limite de {config.LIMITE_EMPRUNTS} livres empruntés atteinte."
     if a_des_penalites:
@@ -83,3 +83,33 @@ def email_valide(email):
         return False
     nom, domaine = email.split("@")
     return nom != "" and "." in domaine
+
+
+def montant_abonnement_valide(montant, categorie):
+    return config.PAIEMENT_MINIMUM_ABONNEMENT <= montant <= prix_abonnement(categorie)
+
+
+def jours_pour_montant(montant, categorie):
+    """Jours d'abonnement obtenus pour un montant payé, au prorata du prix annuel."""
+    return montant * config.DUREE_ABONNEMENT_JOURS // prix_abonnement(categorie)
+
+
+def abonnement_expire_bientot(fin_abonnement, aujourdhui):
+    limite = aujourdhui + timedelta(days=config.RAPPEL_EXPIRATION_JOURS)
+    return aujourdhui <= fin_abonnement <= limite
+
+
+def calculer_nouvelle_limite(date_limite):
+    # La prolongation s'ajoute à la date limite actuelle
+    return date_limite + timedelta(days=config.PROLONGATION_JOURS)
+
+
+def raison_de_refus_prolongation(emprunt, abonnement_en_cours, aujourdhui):
+    """Renvoie le message de refus, ou None si la prolongation est autorisée."""
+    if emprunt.nb_prolongations >= config.PROLONGATIONS_MAX:
+        return "Prolongation impossible : ce prêt a déjà été prolongé."
+    if aujourdhui > emprunt.date_limite:
+        return "Prolongation impossible : la date limite est dépassée (la demande doit être faite avant)."
+    if not abonnement_en_cours:
+        return "Prolongation impossible : abonnement expiré, veuillez d'abord le renouveler."
+    return None

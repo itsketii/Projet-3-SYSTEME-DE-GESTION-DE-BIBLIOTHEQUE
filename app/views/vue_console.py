@@ -36,6 +36,16 @@ class VueConsole:
             montant_remis = self._demander_entier("Montant remis (FCFA) : ", 0, 10000000)
         return mode, montant_remis
 
+    def _demander_montant_abonnement(self, categorie):
+        """Demande la part de l'abonnement à payer et affiche la durée obtenue."""
+        prix = config.CATEGORIES_MEMBRES[categorie]["prix_abonnement"]
+        minimum = config.PAIEMENT_MINIMUM_ABONNEMENT
+        print(f"Abonnement d'un an : {prix} FCFA (paiement partiel possible, minimum {minimum} FCFA)")
+        montant = self._demander_entier(f"Montant à payer (entre {minimum} et {prix} FCFA) : ", minimum, prix)
+        jours = self.controleur.jours_pour_montant(categorie, montant)
+        print(f"{montant} FCFA = {jours} jours d'abonnement")
+        return montant
+
     # ---------- MENU PRINCIPAL ----------
 
     def lancer(self):
@@ -43,6 +53,9 @@ class VueConsole:
         nb_retards = len(self.controleur.lister_retards())
         if nb_retards > 0:
             print(f"Attention : {nb_retards} emprunt(s) en retard.")
+        nb_expirations = len(self.controleur.lister_expirations_proches())
+        if nb_expirations > 0:
+            print(f"Rappel : {nb_expirations} abonnement(s) expirent dans les {config.RAPPEL_EXPIRATION_JOURS} jours.")
 
         while True:
             print("\n--- MENU PRINCIPAL ---")
@@ -53,6 +66,8 @@ class VueConsole:
             print("5. Étudiants et abonnements")
             print("6. Paiements")
             print("7. Catalogue (ajouter des livres)")
+            print("8. Prolonger un prêt")
+            print("9. Lecture sur place")
             print("0. Quitter")
             choix = self._demander("Votre choix : ")
 
@@ -70,6 +85,10 @@ class VueConsole:
                 self.paiements()
             elif choix == "7":
                 self.catalogue()
+            elif choix == "8":
+                self.prolonger()
+            elif choix == "9":
+                self.lecture()
             elif choix == "0":
                 print("Au revoir !")
                 break
@@ -120,7 +139,6 @@ class VueConsole:
             email = etudiant.email or "pas d'email"
             print(f"      Contact : {etudiant.telephone} / {email}")
 
-           
     # ---------- OPTION 2 : EMPRUNTER UN LIVRE ----------
 
     def emprunter(self):
@@ -135,7 +153,7 @@ class VueConsole:
         if statut == "abonnement_expire":
             print(message)
             prix = self.controleur.prix_abonnement_de(matricule)
-            print(f"  1. Renouveler l'abonnement ({prix} FCFA)")
+            print(f"  1. Renouveler l'abonnement (jusqu'à {prix} FCFA)")
             print(f"  2. Payer cet emprunt à l'unité ({config.PRIX_EMPRUNT_OCCASIONNEL} FCFA)")
             print("  0. Annuler")
             choix = self._demander_entier("Votre choix : ", 0, 2)
@@ -143,10 +161,13 @@ class VueConsole:
                 print("Emprunt annulé.")
                 return
 
-            mode, montant_remis = self._demander_paiement()
             if choix == 1:
-                ok, recu = self.controleur.renouveler_abonnement(matricule, mode, montant_remis)
+                categorie = self.controleur.categorie_de(matricule)
+                montant = self._demander_montant_abonnement(categorie)
+                mode, montant_remis = self._demander_paiement()
+                ok, recu = self.controleur.renouveler_abonnement(matricule, montant, mode, montant_remis)
             else:
+                mode, montant_remis = self._demander_paiement()
                 ok, recu = self.controleur.payer_emprunt_occasionnel(matricule, mode, montant_remis)
             print("\n" + recu)
             if not ok:
@@ -173,11 +194,13 @@ class VueConsole:
     def etudiants(self):
         while True:
             print("\n--- ÉTUDIANTS ET ABONNEMENTS ---")
-            print("1. Inscrire un nouvel étudiant")
-            print("2. Consulter la fiche d'un étudiant")
+            print("1. Inscrire un nouveau membre")
+            print("2. Consulter la fiche d'un membre")
             print("3. Renouveler un abonnement")
+            print("4. Abonnements qui expirent bientôt")
+            print("5. Afficher la carte d'un membre")
             print("0. Retour")
-            choix = self._demander_entier("Votre choix : ", 0, 3)
+            choix = self._demander_entier("Votre choix : ", 0, 5)
 
             if choix == 1:
                 self._inscrire()
@@ -185,6 +208,10 @@ class VueConsole:
                 self._consulter()
             elif choix == 3:
                 self._renouveler()
+            elif choix == 4:
+                self._expirations()
+            elif choix == 5:
+                self._carte()
             else:
                 return
 
@@ -207,10 +234,11 @@ class VueConsole:
             print(message)
             return
 
-        prix = config.CATEGORIES_MEMBRES[categorie]["prix_abonnement"]
-        print(f"\nAbonnement d'un an : {prix} FCFA")
+        montant = self._demander_montant_abonnement(categorie)
         mode, montant_remis = self._demander_paiement()
-        ok, message = self.controleur.inscrire_etudiant(nom, categorie, telephone, email, mode, montant_remis)
+        ok, message = self.controleur.inscrire_etudiant(
+            nom, categorie, telephone, email, montant, mode, montant_remis
+        )
         print("\n" + message)
 
     def _consulter(self):
@@ -225,11 +253,29 @@ class VueConsole:
         if not ok:
             return
 
-        prix = self.controleur.prix_abonnement_de(matricule)
-        print(f"\nRenouvellement d'un an : {prix} FCFA")
+        print()
+        categorie = self.controleur.categorie_de(matricule)
+        montant = self._demander_montant_abonnement(categorie)
         mode, montant_remis = self._demander_paiement()
-        ok, message = self.controleur.renouveler_abonnement(matricule, mode, montant_remis)
+        ok, message = self.controleur.renouveler_abonnement(matricule, montant, mode, montant_remis)
         print("\n" + message)
+
+    def _expirations(self):
+        liste = self.controleur.lister_expirations_proches()
+        if not liste:
+            print(f"Aucun abonnement n'expire dans les {config.RAPPEL_EXPIRATION_JOURS} jours.")
+            return
+        print(f"--- ABONNEMENTS QUI EXPIRENT DANS LES {config.RAPPEL_EXPIRATION_JOURS} JOURS ---")
+        for etudiant, jours in liste:
+            fin = etudiant.fin_abonnement.strftime("%d/%m/%Y")
+            email = etudiant.email or "pas d'email"
+            print(f"{etudiant.matricule} {etudiant.nom} | expire le {fin} (dans {jours} jour(s))")
+            print(f"      Contact : {etudiant.telephone} / {email}")
+
+    def _carte(self):
+        matricule = self._demander("Matricule de l'étudiant : ")
+        ok, carte = self.controleur.afficher_carte(matricule)
+        print("\n" + carte)
 
     # ---------- OPTION 6 : PAIEMENTS ----------
 
@@ -312,3 +358,38 @@ class VueConsole:
         nombre = self._demander_entier("Nombre d'exemplaires à ajouter : ", 1, 20)
         ok, message = self.controleur.ajouter_exemplaires(code, nombre)
         print("\n" + message)
+
+    # ---------- OPTION 8 : PROLONGER UN PRÊT ----------
+
+    def prolonger(self):
+        code = self._demander("Code de l'exemplaire à prolonger (ex : L002-01) : ")
+        ok, message = self.controleur.prolonger_emprunt(code)
+        print("\n" + message)
+
+    # ---------- OPTION 9 : LECTURE SUR PLACE ----------
+
+    def lecture(self):
+        while True:
+            print("\n--- LECTURE SUR PLACE ---")
+            print("1. Commencer une lecture (le lecteur choisit un livre)")
+            print("2. Remettre un exemplaire en rayon")
+            print("3. Lectures en cours")
+            print("0. Retour")
+            choix = self._demander_entier("Votre choix : ", 0, 3)
+
+            if choix == 1:
+                code = self._demander("Code du livre (ex : L002) : ")
+                ok, message = self.controleur.commencer_lecture(code)
+                print("\n" + message)
+            elif choix == 2:
+                code = self._demander("Code de l'exemplaire (ex : L002-01) : ")
+                ok, message = self.controleur.terminer_lecture(code)
+                print("\n" + message)
+            elif choix == 3:
+                liste = self.controleur.lister_lectures()
+                if not liste:
+                    print("Aucune lecture en cours.")
+                for code_exemplaire, titre in liste:
+                    print(f"{code_exemplaire} {titre}")
+            else:
+                return

@@ -2,7 +2,7 @@ import os
 import sqlite3
 from datetime import date, timedelta
 
-from app.models.entites import Livre, Exemplaire, Etudiant, Emprunt, Penalite, Paiement
+from app.models.entites import Livre, Exemplaire, Etudiant, Emprunt, Penalite, Paiement, Lecture
 
 
 class DepotSQLite:
@@ -45,7 +45,14 @@ class DepotSQLite:
                 date_emprunt  TEXT NOT NULL,
                 date_limite   TEXT NOT NULL,
                 date_retour   TEXT,
-                etat_retour   TEXT
+                etat_retour   TEXT,
+                nb_prolongations INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS lectures (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                code_exemplaire  TEXT NOT NULL REFERENCES exemplaires(code),
+                date_lecture     TEXT NOT NULL,
+                date_fin         TEXT
             );
             CREATE TABLE IF NOT EXISTS penalites (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -179,6 +186,8 @@ class DepotSQLite:
             "WHERE e.code_livre = ? AND NOT EXISTS ("
             "  SELECT 1 FROM emprunts m WHERE m.code_exemplaire = e.code "
             "  AND (m.date_retour IS NULL OR m.etat_retour = 'perdu')"
+            ") AND NOT EXISTS ("
+            "  SELECT 1 FROM lectures l WHERE l.code_exemplaire = e.code AND l.date_fin IS NULL"
             ") ORDER BY e.code",
             (code_livre,),
         ).fetchall()
@@ -235,6 +244,7 @@ class DepotSQLite:
             date_limite=date.fromisoformat(ligne[4]),
             date_retour=date.fromisoformat(ligne[5]) if ligne[5] else None,
             etat_retour=ligne[6],
+            nb_prolongations=ligne[7],
             id=ligne[0],
         )
 
@@ -254,7 +264,7 @@ class DepotSQLite:
 
     def emprunt_en_cours_de_l_exemplaire(self, code_exemplaire):
         ligne = self.connexion.execute(
-            "SELECT id, code_exemplaire, matricule, date_emprunt, date_limite, date_retour, etat_retour "
+            "SELECT id, code_exemplaire, matricule, date_emprunt, date_limite, date_retour, etat_retour, nb_prolongations "
             "FROM emprunts WHERE code_exemplaire = ? AND (date_retour IS NULL OR etat_retour = 'perdu')",
             (code_exemplaire,),
         ).fetchone()
@@ -264,7 +274,7 @@ class DepotSQLite:
 
     def emprunts_en_cours_de(self, matricule):
         lignes = self.connexion.execute(
-            "SELECT id, code_exemplaire, matricule, date_emprunt, date_limite, date_retour, etat_retour "
+            "SELECT id, code_exemplaire, matricule, date_emprunt, date_limite, date_retour, etat_retour, nb_prolongations "
             "FROM emprunts WHERE matricule = ? AND date_retour IS NULL",
             (matricule,),
         ).fetchall()
@@ -272,7 +282,7 @@ class DepotSQLite:
 
     def tous_les_emprunts_en_cours(self):
         lignes = self.connexion.execute(
-            "SELECT id, code_exemplaire, matricule, date_emprunt, date_limite, date_retour, etat_retour "
+            "SELECT id, code_exemplaire, matricule, date_emprunt, date_limite, date_retour, etat_retour, nb_prolongations "
             "FROM emprunts WHERE date_retour IS NULL ORDER BY date_limite"
         ).fetchall()
         return [self._emprunt_depuis_ligne(ligne) for ligne in lignes]
@@ -377,3 +387,62 @@ class DepotSQLite:
             codes.append(code)
         self.connexion.commit()
         return codes
+
+    def tous_les_etudiants(self):
+        lignes = self.connexion.execute(
+            "SELECT matricule, nom, categorie, telephone, email, fin_abonnement "
+            "FROM etudiants ORDER BY fin_abonnement"
+        ).fetchall()
+        return [
+            Etudiant(ligne[0], ligne[1], ligne[2], ligne[3], ligne[4], date.fromisoformat(ligne[5]))
+            for ligne in lignes
+        ]
+
+    # ---------- PROLONGATION ----------
+
+    def prolonger_emprunt(self, id_emprunt, nouvelle_limite):
+        self.connexion.execute(
+            "UPDATE emprunts SET date_limite = ?, nb_prolongations = nb_prolongations + 1 WHERE id = ?",
+            (nouvelle_limite.isoformat(), id_emprunt),
+        )
+        self.connexion.commit()
+
+    # ---------- LECTURE SUR PLACE ----------
+
+    def ajouter_lecture(self, code_exemplaire, jour):
+        self.connexion.execute(
+            "INSERT INTO lectures (code_exemplaire, date_lecture) VALUES (?, ?)",
+            (code_exemplaire, jour.isoformat()),
+        )
+        self.connexion.commit()
+
+    def lecture_en_cours_de(self, code_exemplaire):
+        ligne = self.connexion.execute(
+            "SELECT id, code_exemplaire, date_lecture FROM lectures "
+            "WHERE code_exemplaire = ? AND date_fin IS NULL",
+            (code_exemplaire,),
+        ).fetchone()
+        if ligne is None:
+            return None
+        return Lecture(ligne[1], date.fromisoformat(ligne[2]), None, ligne[0])
+
+    def terminer_lecture(self, code_exemplaire, jour):
+        self.connexion.execute(
+            "UPDATE lectures SET date_fin = ? WHERE code_exemplaire = ? AND date_fin IS NULL",
+            (jour.isoformat(), code_exemplaire),
+        )
+        self.connexion.commit()
+
+    def lectures_en_cours(self):
+        lignes = self.connexion.execute(
+            "SELECT id, code_exemplaire, date_lecture FROM lectures WHERE date_fin IS NULL ORDER BY id"
+        ).fetchall()
+        return [Lecture(ligne[1], date.fromisoformat(ligne[2]), None, ligne[0]) for ligne in lignes]
+
+    def cloturer_lectures_avant(self, jour):
+        """Une lecture sur place dure une journée : on clôture celles des jours précédents."""
+        self.connexion.execute(
+            "UPDATE lectures SET date_fin = date_lecture WHERE date_fin IS NULL AND date_lecture < ?",
+            (jour.isoformat(),),
+        )
+        self.connexion.commit()
