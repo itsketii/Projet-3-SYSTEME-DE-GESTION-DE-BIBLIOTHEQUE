@@ -1,3 +1,5 @@
+from datetime import date
+
 import config
 
 
@@ -50,6 +52,7 @@ class VueConsole:
             print("4. Consulter les retards")
             print("5. Étudiants et abonnements")
             print("6. Paiements")
+            print("7. Catalogue (ajouter des livres)")
             print("0. Quitter")
             choix = self._demander("Votre choix : ")
 
@@ -65,6 +68,8 @@ class VueConsole:
                 self.etudiants()
             elif choix == "6":
                 self.paiements()
+            elif choix == "7":
+                self.catalogue()
             elif choix == "0":
                 print("Au revoir !")
                 break
@@ -242,3 +247,49 @@ class VueConsole:
         matricule = self._demander("Matricule de l'étudiant : ")
         ok, texte = self.controleur.historique_paiements(matricule)
         print("\n" + texte)
+
+    # ---------- OPTION 7 : CATALOGUE ----------
+
+    def catalogue(self):
+        while True:
+            print("\n--- CATALOGUE ---")
+            print("1. Ajouter un nouveau livre")
+            print("2. Ajouter des exemplaires à un livre")
+            print("0. Retour")
+            choix = self._demander_entier("Votre choix : ", 0, 2)
+
+            if choix == 1:
+                self._ajouter_livre()
+            elif choix == 2:
+                self._ajouter_exemplaires()
+            else:
+                return
+
+    def _ajouter_livre(self):
+        titre = self._demander("Titre : ")
+        auteur = self._demander("Auteur : ")
+        if titre == "" or auteur == "":
+            print("Le titre et l'auteur ne peuvent pas être vides.")
+            return
+        annee = self._demander_entier("Année de parution : ", 1, date.today().year)
+        prix = self._demander_entier("Prix du livre (FCFA) : ", 1, 1000000)
+
+        print("Catégorie :")
+        for numero, categorie in enumerate(config.CATEGORIES, start=1):
+            print(f"  {numero}. {categorie}")
+        choix = self._demander_entier("Votre choix : ", 1, len(config.CATEGORIES))
+        categorie = config.CATEGORIES[choix - 1]
+
+        nombre = self._demander_entier("Nombre d'exemplaires : ", 1, 20)
+        ok, message = self.controleur.ajouter_livre(titre, auteur, annee, prix, categorie, nombre)
+        print("\n" + message)
+
+    def _ajouter_exemplaires(self):
+        code = self._demander("Code du livre (ex : L002) : ")
+        ok, infos = self.controleur.infos_livre(code)
+        print(infos)
+        if not ok:
+            return
+        nombre = self._demander_entier("Nombre d'exemplaires à ajouter : ", 1, 20)
+        ok, message = self.controleur.ajouter_exemplaires(code, nombre)
+        print("\n" + message)
