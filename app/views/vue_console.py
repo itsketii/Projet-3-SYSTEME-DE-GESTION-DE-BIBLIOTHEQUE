@@ -75,13 +75,20 @@ class VueConsole:
 
     def rechercher(self):
         mot_cle = self._demander("Mot-clé (titre ou auteur) : ")
-        resultats = self.controleur.rechercher_livres(mot_cle)
+        print("Catégorie (facultatif) :")
+        print("  0. Toutes les catégories")
+        for numero, categorie in enumerate(config.CATEGORIES, start=1):
+            print(f"  {numero}. {categorie}")
+        choix = self._demander_entier("Votre choix : ", 0, len(config.CATEGORIES))
+        categorie = None if choix == 0 else config.CATEGORIES[choix - 1]
+
+        resultats = self.controleur.rechercher_livres(mot_cle, categorie)
         if not resultats:
             print("Aucun livre trouvé.")
             return
-        for livre, disponible in resultats:
-            statut = "Disponible" if disponible else "Indisponible"
-            print(f"{livre.code} {livre.titre} - {livre.auteur} ({livre.annee}) [{statut}]")
+        for livre, nb_exemplaires, disponibles in resultats:
+            statut = f"{len(disponibles)}/{nb_exemplaires} disponible(s)"
+            print(f"{livre.code} {livre.titre} - {livre.auteur} ({livre.annee}) [{livre.categorie}] [{statut}]")
 
     # ---------- OPTION 4 : CONSULTER LES RETARDS ----------
 
@@ -91,10 +98,10 @@ class VueConsole:
             print("Aucun emprunt en retard.")
             return
         print("--- EMPRUNTS EN RETARD ---")
-        for livre, etudiant, date_limite, jours, montant in liste:
+        for code_exemplaire, livre, etudiant, date_limite, jours, montant in liste:
             limite = date_limite.strftime("%d/%m/%Y")
             print(
-                f"{livre.code} {livre.titre} | {etudiant.nom} ({etudiant.matricule}) "
+                f"{code_exemplaire} {livre.titre} | {etudiant.nom} ({etudiant.matricule}) "
                 f"| prévu le {limite} | {jours} jour(s) | {montant} FCFA"
             )
 
