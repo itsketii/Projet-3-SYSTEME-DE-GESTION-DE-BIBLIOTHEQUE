@@ -13,3 +13,15 @@ PRIX_EMPRUNT_OCCASIONNEL = 500   # en FCFA, pour emprunter sans abonnement valid
 
 MODE_ESPECES = "Espèces"
 MODES_PAIEMENT = [MODE_ESPECES, "Carte bancaire", "Wave", "Orange Money", "MTN Money", "Moov Money"]
+
+CATEGORIES = [
+    "Littérature ivoirienne",
+    "Littérature africaine",
+    "Littérature française classique",
+    "Théâtre",
+    "Poésie",
+    "Fantasy et science-fiction",
+    "Jeunesse",
+    "Informatique",
+    "Manuels et études",
+]
