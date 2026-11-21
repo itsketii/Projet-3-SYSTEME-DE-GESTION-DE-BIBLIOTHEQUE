@@ -74,21 +74,29 @@ class VueConsole:
     # ---------- OPTION 1 : RECHERCHER UN LIVRE ----------
 
     def rechercher(self):
-        mot_cle = self._demander("Mot-clé (titre ou auteur) : ")
-        print("Catégorie (facultatif) :")
-        print("  0. Toutes les catégories")
+        mot_cle = self._demander("Mot-clé (titre ou auteur, Entrée pour tout voir) : ")
+
+        print("Filtrer par type de livre :")
+        print("  0. Tous les types")
         for numero, categorie in enumerate(config.CATEGORIES, start=1):
             print(f"  {numero}. {categorie}")
         choix = self._demander_entier("Votre choix : ", 0, len(config.CATEGORIES))
-        categorie = None if choix == 0 else config.CATEGORIES[choix - 1]
+        categorie = None
+        if choix > 0:
+            categorie = config.CATEGORIES[choix - 1]
 
         resultats = self.controleur.rechercher_livres(mot_cle, categorie)
         if not resultats:
             print("Aucun livre trouvé.")
             return
+        print()
         for livre, nb_exemplaires, disponibles in resultats:
-            statut = f"{len(disponibles)}/{nb_exemplaires} disponible(s)"
-            print(f"{livre.code} {livre.titre} - {livre.auteur} ({livre.annee}) [{livre.categorie}] [{statut}]")
+            if disponibles:
+                statut = f"{len(disponibles)}/{nb_exemplaires} disponible(s) : {', '.join(disponibles)}"
+            else:
+                statut = f"aucun exemplaire disponible (0/{nb_exemplaires})"
+            print(f"{livre.code} {livre.titre} - {livre.auteur} ({livre.annee}) [{livre.categorie}]")
+            print(f"      {statut}")
 
     # ---------- OPTION 4 : CONSULTER LES RETARDS ----------
 
@@ -109,7 +117,7 @@ class VueConsole:
     # ---------- OPTION 2 : EMPRUNTER UN LIVRE ----------
 
     def emprunter(self):
-        code = self._demander("Code du livre : ")
+        code = self._demander("Code du livre (ex : L002) : ")
         matricule = self._demander("Matricule de l'étudiant : ")
 
         statut, message = self.controleur.verifier_emprunt(code, matricule)
@@ -141,7 +149,7 @@ class VueConsole:
     # ---------- OPTION 3 : RENDRE UN LIVRE ----------
 
     def rendre(self):
-        code = self._demander("Code du livre rendu : ")
+        code = self._demander("Code de l'exemplaire rendu (ex : L002-01) : ")
         print("État du livre :")
         print("  1. Bon état")
         print("  2. Abîmé")
