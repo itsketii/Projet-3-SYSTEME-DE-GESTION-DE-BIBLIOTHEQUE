@@ -187,7 +187,8 @@ class ControleurBibliotheque:
         if etudiant is None:
             return False, f"Aucun étudiant avec le matricule {matricule}."
 
-        ok, message = self.encaisser(matricule, "abonnement", config.PRIX_ABONNEMENT, mode, montant_remis)
+        prix = regles.prix_abonnement(etudiant.categorie)
+        ok, message = self.encaisser(matricule, "abonnement", prix, mode, montant_remis)
         if ok:
             nouvelle_fin = regles.calculer_fin_abonnement(etudiant.fin_abonnement, date.today())
             self.depot.mettre_a_jour_abonnement(matricule, nouvelle_fin)
@@ -201,26 +202,52 @@ class ControleurBibliotheque:
 
     # ---------- OPTION 5 : ETUDIANTS ET ABONNEMENTS ----------
 
-    def inscrire_etudiant(self, nom, mode, montant_remis=0):
-        """Inscrit un nouvel étudiant (premier abonnement payé). Renvoie (ok, message)."""
-        nom = nom.strip().title()
-        if nom == "":
+    def verifier_inscription(self, nom, categorie, telephone, email):
+        """Vérifie les informations d'un futur membre. Renvoie (ok, message)."""
+        if nom.strip() == "":
             return False, "Le nom ne peut pas être vide."
+        if categorie not in config.CATEGORIES_MEMBRES:
+            return False, "Catégorie de membre inconnue."
+        if not regles.telephone_valide(regles.normaliser_telephone(telephone)):
+            return False, "Numéro de téléphone invalide (8 à 15 chiffres)."
+        email = email.strip()
+        if email != "" and not regles.email_valide(email):
+            return False, "Adresse email invalide."
+        return True, ""
 
-        matricule = self.depot.prochain_matricule()
-        # On encaisse d'abord : si le paiement échoue, l'étudiant n'est pas créé
-        ok, recu = self.encaisser(matricule, "abonnement", config.PRIX_ABONNEMENT, mode, montant_remis)
+    def inscrire_etudiant(self, nom, categorie, telephone, email, mode, montant_remis=0):
+        """Inscrit un nouveau membre (premier abonnement payé). Renvoie (ok, message)."""
+        ok, message = self.verifier_inscription(nom, categorie, telephone, email)
+        if not ok:
+            return False, message
+
+        nom = nom.strip().title()
+        telephone = regles.normaliser_telephone(telephone)
+        email = email.strip()
+        parametres = config.CATEGORIES_MEMBRES[categorie]
+
+        matricule = self.depot.prochain_matricule(parametres["prefixe"])
+        prix = regles.prix_abonnement(categorie)
+        # On encaisse d'abord : si le paiement échoue, le membre n'est pas créé
+        ok, recu = self.encaisser(matricule, "abonnement", prix, mode, montant_remis)
         if not ok:
             return False, recu
 
         aujourdhui = date.today()
         fin = regles.calculer_fin_abonnement(aujourdhui, aujourdhui)
-        self.depot.ajouter_etudiant(Etudiant(matricule, nom, fin))
+        self.depot.ajouter_etudiant(Etudiant(matricule, nom, categorie, telephone, email, fin))
         return True, (
-            f"Inscription réussie : {nom}, matricule {matricule}.\n\n"
+            f"Inscription réussie : {nom} ({parametres['libelle']}), matricule {matricule}.\n\n"
             f"{recu}\n"
             f"Abonnement valable jusqu'au {fin.strftime('%d/%m/%Y')}."
         )
+
+    def prix_abonnement_de(self, matricule):
+        """Prix de l'abonnement annuel du membre (0 si le matricule est inconnu)."""
+        etudiant = self.depot.trouver_etudiant(self._normaliser(matricule))
+        if etudiant is None:
+            return 0
+        return regles.prix_abonnement(etudiant.categorie)
 
     def consulter_etudiant(self, matricule):
         """Renvoie (ok, fiche de l'étudiant)."""
@@ -235,8 +262,13 @@ class ControleurBibliotheque:
             abonnement = f"valide jusqu'au {fin}"
         else:
             abonnement = f"EXPIRÉ depuis le {fin}"
+        libelle = config.CATEGORIES_MEMBRES[etudiant.categorie]["libelle"]
+        email = etudiant.email or "non renseigné"
         lignes = [
-            f"Étudiant : {etudiant.nom} ({etudiant.matricule})",
+            f"Membre : {etudiant.nom} ({etudiant.matricule})",
+            f"Catégorie : {libelle}",
+            f"Téléphone : {etudiant.telephone}",
+            f"Email : {email}",
             f"Abonnement : {abonnement}",
         ]
 

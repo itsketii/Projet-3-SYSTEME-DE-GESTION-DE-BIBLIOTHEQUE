@@ -35,10 +35,10 @@ class Emprunt:
     code_exemplaire: str
     matricule: str
     date_emprunt: date
-    date_limite: date          # emprunt + 14 jours
-    date_retour: date | None   # None tant que le livre n'est pas rendu
-    etat_retour: str | None    # "bon", "abime" ou "perdu"
-    id: int | None             # donné par la base de données
+    date_limite: date                   # emprunt + 14 jours
+    date_retour: date | None = None     # None tant que le livre n'est pas rendu
+    etat_retour: str | None = None      # "bon", "abime" ou "perdu"
+    id: int | None = None               # donné par la base de données
 
 
 @dataclass
@@ -58,4 +58,4 @@ class Paiement:
     montant: int
     date: date
     mode: str              # "Espèces", "Wave", "Orange Money"...
-    id: int | None
+    id: int | None = None
