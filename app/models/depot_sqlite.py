@@ -33,6 +33,9 @@ class DepotSQLite:
             CREATE TABLE IF NOT EXISTS etudiants (
                 matricule       TEXT PRIMARY KEY,
                 nom             TEXT NOT NULL,
+                categorie       TEXT NOT NULL,
+                telephone       TEXT NOT NULL,
+                email           TEXT NOT NULL,
                 fin_abonnement  TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS emprunts (
@@ -108,13 +111,22 @@ class DepotSQLite:
                 )
 
         aujourdhui = date.today()
+        # (matricule, nom, catégorie, téléphone, email, fin de l'abonnement)
         etudiants = [
-            ("IIT-001", "Aya Konan", (aujourdhui + timedelta(days=365)).isoformat()),
-            ("IIT-002", "Yao Kouassi", (aujourdhui + timedelta(days=200)).isoformat()),
-            ("IIT-003", "Fatou Traoré", (aujourdhui - timedelta(days=30)).isoformat()),
+            ("IIT-001", "Aya Konan", "etudiant", "0000000001", "aya.konan@example.com",
+             (aujourdhui + timedelta(days=365)).isoformat()),
+            ("IIT-002", "Yao Kouassi", "etudiant", "0000000002", "yao.kouassi@example.com",
+             (aujourdhui + timedelta(days=200)).isoformat()),
+            ("IIT-003", "Fatou Traoré", "etudiant", "0000000003", "",
+             (aujourdhui - timedelta(days=30)).isoformat()),
+            ("ELV-001", "Koffi Brou", "eleve", "0000000004", "",
+             (aujourdhui + timedelta(days=100)).isoformat()),
+            ("EXT-001", "Marie Diallo", "externe", "0000000005", "marie.diallo@example.com",
+             (aujourdhui + timedelta(days=300)).isoformat()),
         ]
         self.connexion.executemany(
-            "INSERT INTO etudiants (matricule, nom, fin_abonnement) VALUES (?, ?, ?)",
+            "INSERT INTO etudiants (matricule, nom, categorie, telephone, email, fin_abonnement) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             etudiants,
         )
         self.connexion.commit()
@@ -176,23 +188,35 @@ class DepotSQLite:
 
     def trouver_etudiant(self, matricule):
         ligne = self.connexion.execute(
-            "SELECT matricule, nom, fin_abonnement FROM etudiants WHERE matricule = ?",
+            "SELECT matricule, nom, categorie, telephone, email, fin_abonnement "
+            "FROM etudiants WHERE matricule = ?",
             (matricule,),
         ).fetchone()
         if ligne is None:
             return None
-        return Etudiant(ligne[0], ligne[1], date.fromisoformat(ligne[2]))
+        return Etudiant(ligne[0], ligne[1], ligne[2], ligne[3], ligne[4], date.fromisoformat(ligne[5]))
 
     def ajouter_etudiant(self, etudiant):
         self.connexion.execute(
-            "INSERT INTO etudiants (matricule, nom, fin_abonnement) VALUES (?, ?, ?)",
-            (etudiant.matricule, etudiant.nom, etudiant.fin_abonnement.isoformat()),
+            "INSERT INTO etudiants (matricule, nom, categorie, telephone, email, fin_abonnement) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                etudiant.matricule,
+                etudiant.nom,
+                etudiant.categorie,
+                etudiant.telephone,
+                etudiant.email,
+                etudiant.fin_abonnement.isoformat(),
+            ),
         )
         self.connexion.commit()
 
-    def prochain_matricule(self):
-        nb = self.connexion.execute("SELECT COUNT(*) FROM etudiants").fetchone()[0]
-        return f"IIT-{nb + 1:03d}"
+    def prochain_matricule(self, prefixe):
+        nb = self.connexion.execute(
+            "SELECT COUNT(*) FROM etudiants WHERE matricule LIKE ?",
+            (f"{prefixe}-%",),
+        ).fetchone()[0]
+        return f"{prefixe}-{nb + 1:03d}"
 
     def mettre_a_jour_abonnement(self, matricule, nouvelle_fin):
         self.connexion.execute(

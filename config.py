@@ -7,7 +7,13 @@ PENALITE_PAR_JOUR = 200          # en FCFA, par jour de retard
 POURCENTAGE_ABIME = 30           # % du prix du livre si rendu abîmé
 POURCENTAGE_PERDU = 100          # % du prix du livre si perdu ou détruit
 
-PRIX_ABONNEMENT = 5000           # en FCFA
+# Catégories de membres : préfixe du matricule et prix de l'abonnement annuel (FCFA)
+CATEGORIES_MEMBRES = {
+    "eleve": {"libelle": "Élève (collège, lycée)", "prefixe": "ELV", "prix_abonnement": 2000},
+    "etudiant": {"libelle": "Étudiant", "prefixe": "IIT", "prix_abonnement": 3000},
+    "externe": {"libelle": "Personne extérieure", "prefixe": "EXT", "prix_abonnement": 5000},
+}
+
 DUREE_ABONNEMENT_JOURS = 365     # un an
 PRIX_EMPRUNT_OCCASIONNEL = 500   # en FCFA, pour emprunter sans abonnement valide
 

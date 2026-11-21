@@ -117,6 +117,8 @@ class VueConsole:
                 f"{code_exemplaire} {livre.titre} | {etudiant.nom} ({etudiant.matricule}) "
                 f"| prévu le {limite} | {jours} jour(s) | {montant} FCFA"
             )
+            email = etudiant.email or "pas d'email"
+            print(f"      Contact : {etudiant.telephone} / {email}")
 
            
     # ---------- OPTION 2 : EMPRUNTER UN LIVRE ----------
@@ -132,7 +134,8 @@ class VueConsole:
 
         if statut == "abonnement_expire":
             print(message)
-            print(f"  1. Renouveler l'abonnement ({config.PRIX_ABONNEMENT} FCFA)")
+            prix = self.controleur.prix_abonnement_de(matricule)
+            print(f"  1. Renouveler l'abonnement ({prix} FCFA)")
             print(f"  2. Payer cet emprunt à l'unité ({config.PRIX_EMPRUNT_OCCASIONNEL} FCFA)")
             print("  0. Annuler")
             choix = self._demander_entier("Votre choix : ", 0, 2)
@@ -186,13 +189,28 @@ class VueConsole:
                 return
 
     def _inscrire(self):
-        nom = self._demander("Nom complet du nouvel étudiant : ")
-        if nom == "":
-            print("Le nom ne peut pas être vide.")
+        nom = self._demander("Nom complet : ")
+
+        print("Catégorie de membre :")
+        cles = list(config.CATEGORIES_MEMBRES)
+        for numero, cle in enumerate(cles, start=1):
+            parametres = config.CATEGORIES_MEMBRES[cle]
+            print(f"  {numero}. {parametres['libelle']} ({parametres['prix_abonnement']} FCFA par an)")
+        choix = self._demander_entier("Votre choix : ", 1, len(cles))
+        categorie = cles[choix - 1]
+
+        telephone = self._demander("Téléphone : ")
+        email = self._demander("Email (Entrée pour passer) : ")
+
+        ok, message = self.controleur.verifier_inscription(nom, categorie, telephone, email)
+        if not ok:
+            print(message)
             return
-        print(f"Abonnement d'un an : {config.PRIX_ABONNEMENT} FCFA")
+
+        prix = config.CATEGORIES_MEMBRES[categorie]["prix_abonnement"]
+        print(f"\nAbonnement d'un an : {prix} FCFA")
         mode, montant_remis = self._demander_paiement()
-        ok, message = self.controleur.inscrire_etudiant(nom, mode, montant_remis)
+        ok, message = self.controleur.inscrire_etudiant(nom, categorie, telephone, email, mode, montant_remis)
         print("\n" + message)
 
     def _consulter(self):
@@ -207,7 +225,8 @@ class VueConsole:
         if not ok:
             return
 
-        print(f"\nRenouvellement d'un an : {config.PRIX_ABONNEMENT} FCFA")
+        prix = self.controleur.prix_abonnement_de(matricule)
+        print(f"\nRenouvellement d'un an : {prix} FCFA")
         mode, montant_remis = self._demander_paiement()
         ok, message = self.controleur.renouveler_abonnement(matricule, mode, montant_remis)
         print("\n" + message)

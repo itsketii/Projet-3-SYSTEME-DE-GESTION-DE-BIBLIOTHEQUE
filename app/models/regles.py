@@ -62,3 +62,24 @@ def raison_de_refus(livre, nb_exemplaires_disponibles, nb_emprunts_etudiant, a_d
     if a_des_penalites:
         return "Impossible : des pénalités sont à régler avant un nouvel emprunt."
     return None
+
+
+def prix_abonnement(categorie):
+    return config.CATEGORIES_MEMBRES[categorie]["prix_abonnement"]
+
+
+def normaliser_telephone(texte):
+    # "07 08 09 10 11" devient "0708091011"
+    return texte.replace(" ", "").replace(".", "").replace("-", "")
+
+
+def telephone_valide(telephone):
+    chiffres = telephone[1:] if telephone.startswith("+") else telephone
+    return chiffres.isdigit() and 8 <= len(chiffres) <= 15
+
+
+def email_valide(email):
+    if " " in email or email.count("@") != 1:
+        return False
+    nom, domaine = email.split("@")
+    return nom != "" and "." in domaine

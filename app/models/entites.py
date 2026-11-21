@@ -5,7 +5,7 @@ from typing import Optional
 
 @dataclass
 class Livre:
-    code: str      # identifiant unique
+    code: str      # identifiant unique, ex : "L002"
     titre: str
     auteur: str
     annee: int
@@ -15,14 +15,18 @@ class Livre:
 
 @dataclass
 class Exemplaire:
-    code: str        # ex : "L002-01" (code de l'exemplaire)
-    code_livre: str  # le livre dont c'est un exemplaire
+    code: str        # ex : "L002-01" (un livre peut avoir plusieurs exemplaires)
+    code_livre: str  # le livre dont c'est un exemplaire, ex : "L002"
 
 
 @dataclass
 class Etudiant:
-    matricule: str         # ex : "IIT-001"
+    """Un adhérent de la bibliothèque : élève, étudiant ou personne extérieure."""
+    matricule: str         # ex : "IIT-001", "ELV-001", "EXT-001"
     nom: str
+    categorie: str         # "eleve", "etudiant" ou "externe" (voir config.CATEGORIES_MEMBRES)
+    telephone: str         # pour le contacter en cas de retard
+    email: str             # facultatif ("" si absent)
     fin_abonnement: date   # dernier jour de l'abonnement
 
 
@@ -31,10 +35,10 @@ class Emprunt:
     code_exemplaire: str
     matricule: str
     date_emprunt: date
-    date_limite: date                # emprunt + 14 jours
-    date_retour: date | None = None  # None tant que le livre n'est pas rendu
-    etat_retour: str | None = None   # "bon", "abime" ou "perdu"
-    id: int | None = None            # donné par la base de données
+    date_limite: date                   # emprunt + 14 jours
+    date_retour: date | None = None     # None tant que le livre n'est pas rendu
+    etat_retour: str | None = None      # "bon", "abime" ou "perdu"
+    id: int | None = None               # donné par la base de données
 
 
 @dataclass
@@ -54,4 +58,4 @@ class Paiement:
     montant: int
     date: date
     mode: str              # "Espèces", "Wave", "Orange Money"...
-    id: int | None
+    id: int | None = None
