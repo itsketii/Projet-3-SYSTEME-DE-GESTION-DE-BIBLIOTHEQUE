@@ -5,13 +5,32 @@ Application **console** en Python pour gérer une bibliothèque universitaire : 
 
 Le projet suit l'architecture **MVC** (Modèle - Vue - Contrôleur) et n'utilise que la bibliothèque standard de Python : **aucune installation de paquet n'est nécessaire**.
 
-## Lancer le programme
+## Installation et lancement
 
+### 1. Prérequis
+- **Python 3.9 ou plus** (vérifier avec `python --version`)
+- **Git** (pour récupérer le projet)
+
+Aucun paquet externe n'est nécessaire.
+
+### 2. Récupérer le projet
+```
+git clone https://github.com/itsketii/Projet-3-SYSTEME-DE-GESTION-DE-BIBLIOTHEQUE.git
+cd Projet-3-SYSTEME-DE-GESTION-DE-BIBLIOTHEQUE
+```
+
+### 3. (Facultatif) Créer un environnement virtuel
+```
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+source .venv/bin/activate     # Linux / macOS
+```
+
+### 4. Lancer le programme
 ```
 python main.py
 ```
-
-Python 3.9 ou plus est requis. Au premier lancement, la base SQLite `data/bibliotheque.db` est créée automatiquement, avec des livres et des étudiants de démonstration.
+Au premier lancement, la base SQLite `data/bibliotheque.db` est créée automatiquement, avec des livres et des étudiants de démonstration.
 
 ## Menu
 
