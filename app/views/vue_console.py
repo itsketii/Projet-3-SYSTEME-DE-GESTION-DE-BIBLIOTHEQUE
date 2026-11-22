@@ -150,6 +150,7 @@ class VueConsole:
             print(message)
             return
 
+        frais_payes = False
         if statut == "abonnement_expire":
             print(message)
             prix = self.controleur.prix_abonnement_de(matricule)
@@ -169,11 +170,12 @@ class VueConsole:
             else:
                 mode, montant_remis = self._demander_paiement()
                 ok, recu = self.controleur.payer_emprunt_occasionnel(matricule, mode, montant_remis)
+                frais_payes = True
             print("\n" + recu)
             if not ok:
                 return
 
-        print("\n" + self.controleur.enregistrer_emprunt(code, matricule))
+        print("\n" + self.controleur.enregistrer_emprunt(code, matricule, frais_payes))
 
     # ---------- OPTION 3 : RENDRE UN LIVRE ----------
 

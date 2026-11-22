@@ -44,7 +44,7 @@ Au premier lancement, la base SQLite `data/bibliotheque.db` est créée automati
 0. Quitter
 ```
 
-Chaque emprunt, retour et paiement produit un **reçu numéroté** (EMP-0001, RET-0001, REC-0001). Les cartes d'abonnement sont enregistrées dans `data/cartes/`.
+Chaque emprunt, retour et paiement produit un **reçu numéroté** (EMP-0001, RET-0001, REC-0001). Le reçu d'emprunt rappelle les frais payés quand l'emprunt est réglé à l'unité. Les cartes d'abonnement sont enregistrées dans `data/cartes/`.
 
 ## Règles de la bibliothèque
 
@@ -62,6 +62,7 @@ Tous les réglages se trouvent dans `config.py`.
 | Pénalité de retard | 200 FCFA par jour, plafonnée au prix du livre |
 | Livre rendu abîmé | 30 % du prix du livre |
 | Livre perdu ou détruit | 100 % du prix du livre (aucune pénalité de retard en plus) |
+| Suspension | après 3 livres abîmés ou perdus, l'abonnement est annulé : le membre doit régler ses pénalités et renouveler |
 | Lecture sur place | sans identification du lecteur ; l'exemplaire est occupé jusqu'à sa remise en rayon (clôturée automatiquement le jour suivant) |
 | Modes de paiement | Espèces, carte bancaire, Wave, Orange Money, MTN Money, Moov Money |
 
