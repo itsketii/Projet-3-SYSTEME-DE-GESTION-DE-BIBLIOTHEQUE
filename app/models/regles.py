@@ -113,3 +113,7 @@ def raison_de_refus_prolongation(emprunt, abonnement_en_cours, aujourdhui):
     if not abonnement_en_cours:
         return "Prolongation impossible : abonnement expiré, veuillez d'abord le renouveler."
     return None
+
+
+def est_suspendu(incidents):
+    return incidents >= config.INCIDENTS_MAX

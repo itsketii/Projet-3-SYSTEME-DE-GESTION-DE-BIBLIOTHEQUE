@@ -1,5 +1,5 @@
 import os
-from datetime import date
+from datetime import date, timedelta
 
 import config
 from app.models import regles
@@ -28,7 +28,9 @@ class ControleurBibliotheque:
         resultats = []
         for livre in self.depot.chercher_livres(mot_cle, categorie):
             nb_exemplaires = len(self.depot.exemplaires_du_livre(livre.code))
-            disponibles = [e.code for e in self.depot.exemplaires_disponibles(livre.code)]
+            disponibles = [
+                e.code for e in self.depot.exemplaires_disponibles(livre.code)
+            ]
             resultats.append((livre, nb_exemplaires, disponibles))
         return resultats
 
@@ -39,7 +41,10 @@ class ControleurBibliotheque:
         code_exemplaire = self._normaliser(code_exemplaire)
         exemplaire = self.depot.trouver_exemplaire(code_exemplaire)
         if exemplaire is None:
-            return False, f"Impossible : aucun exemplaire avec le code {code_exemplaire}."
+            return (
+                False,
+                f"Impossible : aucun exemplaire avec le code {code_exemplaire}.",
+            )
         livre = self.depot.trouver_livre(exemplaire.code_livre)
 
         emprunt = self.depot.emprunt_en_cours_de_l_exemplaire(code_exemplaire)
@@ -49,19 +54,47 @@ class ControleurBibliotheque:
                     f"L'exemplaire {code_exemplaire} est en lecture sur place : "
                     "utilisez « Lecture sur place » pour le remettre en rayon."
                 )
-            return False, f"L'exemplaire {code_exemplaire} de « {livre.titre} » n'est pas emprunté : rien à rendre."
+            return (
+                False,
+                f"L'exemplaire {code_exemplaire} de « {livre.titre} » n'est pas emprunté : rien à rendre.",
+            )
         if emprunt.date_retour is not None:
-            return False, f"L'exemplaire {code_exemplaire} de « {livre.titre} » est déjà déclaré perdu ou détruit."
+            return (
+                False,
+                f"L'exemplaire {code_exemplaire} de « {livre.titre} » est déjà déclaré perdu ou détruit.",
+            )
 
         etudiant = self.depot.trouver_etudiant(emprunt.matricule)
         aujourdhui = date.today()
         self.depot.enregistrer_retour(emprunt.id, aujourdhui, etat)
 
-        penalites = regles.penalites_au_retour(emprunt.date_limite, aujourdhui, etat, livre.prix)
+        penalites = regles.penalites_au_retour(
+            emprunt.date_limite, aujourdhui, etat, livre.prix
+        )
         total = 0
         for motif, montant in penalites:
-            self.depot.ajouter_penalite(Penalite(emprunt.id, emprunt.matricule, montant, motif))
+            self.depot.ajouter_penalite(
+                Penalite(emprunt.id, emprunt.matricule, montant, motif)
+            )
             total += montant
+
+        avertissement = ""
+        if etat in ("abime", "perdu"):
+            incidents = self.depot.ajouter_incident(emprunt.matricule)
+            if regles.est_suspendu(incidents):
+                self.depot.annuler_abonnement(
+                    emprunt.matricule, aujourdhui - timedelta(days=1)
+                )
+                self._enregistrer_carte(self.depot.trouver_etudiant(emprunt.matricule))
+                avertissement = (
+                    f"ABONNEMENT ANNULÉ : {incidents} livres abîmés ou perdus. "
+                    "Le membre doit régler ses pénalités et renouveler son abonnement."
+                )
+            else:
+                avertissement = (
+                    f"Attention : {incidents} livre(s) abîmé(s) ou perdu(s) "
+                    f"sur {config.INCIDENTS_MAX} autorisés avant l'annulation de l'abonnement."
+                )
 
         jours = regles.jours_de_retard(emprunt.date_limite, aujourdhui)
         lignes = [
@@ -84,6 +117,8 @@ class ControleurBibliotheque:
             lignes.append(f"Total à régler : {total} FCFA (menu Paiements)")
         else:
             lignes.append("Aucune pénalité.")
+        if avertissement != "":
+            lignes.append(avertissement)
         return True, "\n".join(lignes)
 
     # ---------- OPTION 4 : CONSULTER LES RETARDS ----------
@@ -99,7 +134,16 @@ class ControleurBibliotheque:
                 etudiant = self.depot.trouver_etudiant(emprunt.matricule)
                 jours = regles.jours_de_retard(emprunt.date_limite, aujourdhui)
                 montant = regles.penalite_retard(jours, livre.prix)
-                retards.append((emprunt.code_exemplaire, livre, etudiant, emprunt.date_limite, jours, montant))
+                retards.append(
+                    (
+                        emprunt.code_exemplaire,
+                        livre,
+                        etudiant,
+                        emprunt.date_limite,
+                        jours,
+                        montant,
+                    )
+                )
         return retards
 
     # ---------- OPTION 2 : EMPRUNTER UN LIVRE ----------
@@ -114,7 +158,16 @@ class ControleurBibliotheque:
             return "refus", f"Impossible : aucun livre avec le code {code_livre}."
         etudiant = self.depot.trouver_etudiant(matricule)
         if etudiant is None:
-            return "refus", f"Impossible : aucun étudiant avec le matricule {matricule}."
+            return (
+                "refus",
+                f"Impossible : aucun étudiant avec le matricule {matricule}.",
+            )
+
+        if regles.est_suspendu(etudiant.incidents):
+            return "refus", (
+                f"Impossible : abonnement suspendu ({etudiant.incidents} livres abîmés ou perdus). "
+                "Le membre doit renouveler son abonnement."
+            )
 
         raison = regles.raison_de_refus(
             livre,
@@ -133,7 +186,7 @@ class ControleurBibliotheque:
             )
         return "ok", ""
 
-    def enregistrer_emprunt(self, code_livre, matricule):
+    def enregistrer_emprunt(self, code_livre, matricule, frais_payes=False):
         """Crée l'emprunt (à appeler après verifier_emprunt). Renvoie le message de confirmation."""
         code_livre = self._normaliser(code_livre)
         # On remet le premier exemplaire disponible : le lecteur ne choisit pas
@@ -146,6 +199,8 @@ class ControleurBibliotheque:
             self._normaliser(matricule),
             aujourdhui,
             regles.calculer_date_limite(aujourdhui),
+            None,
+            None,
         )
         numero = self.depot.ajouter_emprunt(emprunt)
 
@@ -161,6 +216,16 @@ class ControleurBibliotheque:
             f"Livre : {livre.titre} (exemplaire {exemplaire.code})",
             f"À rendre avant le : {limite}",
         ]
+        if frais_payes:
+            dernier = None
+            for paiement in self.depot.paiements_de(emprunt.matricule):
+                if paiement.motif == "emprunt":
+                    dernier = paiement
+            if dernier is not None:
+                lignes.append(
+                    f"Frais d'emprunt payés : {dernier.montant} FCFA ({dernier.mode}), "
+                    f"reçu REC-{dernier.id:04d}"
+                )
         return "\n".join(lignes)
 
     # ---------- PAIEMENTS (réutilisés par plusieurs options) ----------
@@ -170,11 +235,16 @@ class ControleurBibliotheque:
         monnaie = 0
         if mode == config.MODE_ESPECES:
             if montant_remis < montant_du:
-                return False, f"Montant insuffisant : {montant_du} FCFA à payer, {montant_remis} FCFA remis."
+                return (
+                    False,
+                    f"Montant insuffisant : {montant_du} FCFA à payer, {montant_remis} FCFA remis.",
+                )
             monnaie = montant_remis - montant_du
 
         aujourdhui = date.today()
-        numero = self.depot.ajouter_paiement(Paiement(matricule, motif, montant_du, aujourdhui, mode))
+        numero = self.depot.ajouter_paiement(
+            Paiement(matricule, motif, montant_du, aujourdhui, mode)
+        )
         lignes = [
             f"--- REÇU DE PAIEMENT N° REC-{numero:04d} ---",
             f"Date : {aujourdhui.strftime('%d/%m/%Y')}",
@@ -197,11 +267,16 @@ class ControleurBibliotheque:
         if not regles.montant_abonnement_valide(montant, etudiant.categorie):
             return False, self._message_montant(etudiant.categorie)
 
-        ok, message = self.encaisser(matricule, "abonnement", montant, mode, montant_remis)
+        ok, message = self.encaisser(
+            matricule, "abonnement", montant, mode, montant_remis
+        )
         if ok:
             jours = regles.jours_pour_montant(montant, etudiant.categorie)
-            nouvelle_fin = regles.calculer_fin_abonnement(etudiant.fin_abonnement, date.today(), jours)
+            nouvelle_fin = regles.calculer_fin_abonnement(
+                etudiant.fin_abonnement, date.today(), jours
+            )
             self.depot.mettre_a_jour_abonnement(matricule, nouvelle_fin)
+            self.depot.reinitialiser_incidents(matricule)
             etudiant.fin_abonnement = nouvelle_fin
             chemin = self._enregistrer_carte(etudiant)
             message += (
@@ -230,7 +305,9 @@ class ControleurBibliotheque:
     def payer_emprunt_occasionnel(self, matricule, mode, montant_remis=0):
         """Renvoie (ok, message)."""
         matricule = self._normaliser(matricule)
-        return self.encaisser(matricule, "emprunt", config.PRIX_EMPRUNT_OCCASIONNEL, mode, montant_remis)
+        return self.encaisser(
+            matricule, "emprunt", config.PRIX_EMPRUNT_OCCASIONNEL, mode, montant_remis
+        )
 
     # ---------- OPTION 5 : ETUDIANTS ET ABONNEMENTS ----------
 
@@ -247,7 +324,9 @@ class ControleurBibliotheque:
             return False, "Adresse email invalide."
         return True, ""
 
-    def inscrire_etudiant(self, nom, categorie, telephone, email, montant, mode, montant_remis=0):
+    def inscrire_etudiant(
+        self, nom, categorie, telephone, email, montant, mode, montant_remis=0
+    ):
         """Inscrit un nouveau membre ; `montant` est la part de l'abonnement payée. Renvoie (ok, message)."""
         ok, message = self.verifier_inscription(nom, categorie, telephone, email)
         if not ok:
@@ -308,7 +387,10 @@ class ControleurBibliotheque:
             f"Téléphone : {etudiant.telephone}",
             f"Email : {email}",
             f"Abonnement : {abonnement}",
+            f"Livres abîmés ou perdus : {etudiant.incidents}/{config.INCIDENTS_MAX}",
         ]
+        if regles.est_suspendu(etudiant.incidents):
+            lignes.append("Statut : SUSPENDU (renouvellement obligatoire)")
 
         emprunts = self.depot.emprunts_en_cours_de(matricule)
         if emprunts:
@@ -317,10 +399,14 @@ class ControleurBibliotheque:
                 exemplaire = self.depot.trouver_exemplaire(emprunt.code_exemplaire)
                 livre = self.depot.trouver_livre(exemplaire.code_livre)
                 retour = emprunt.date_limite.strftime("%d/%m/%Y")
-                note = " (EN RETARD)" if regles.est_en_retard(emprunt, aujourdhui) else ""
+                note = (
+                    " (EN RETARD)" if regles.est_en_retard(emprunt, aujourdhui) else ""
+                )
                 if emprunt.nb_prolongations > 0:
                     note += " (prolongé)"
-                lignes.append(f"  - {emprunt.code_exemplaire} {livre.titre}, à rendre le {retour}{note}")
+                lignes.append(
+                    f"  - {emprunt.code_exemplaire} {livre.titre}, à rendre le {retour}{note}"
+                )
         else:
             lignes.append("Aucun livre emprunté.")
 
@@ -378,13 +464,17 @@ class ControleurBibliotheque:
         lignes = ["Historique des paiements :"]
         for paiement in paiements:
             jour = paiement.date.strftime("%d/%m/%Y")
-            lignes.append(f"  {jour} - {paiement.motif} - {paiement.montant} FCFA ({paiement.mode})")
+            lignes.append(
+                f"  {jour} - {paiement.motif} - {paiement.montant} FCFA ({paiement.mode})"
+            )
         total = sum(paiement.montant for paiement in paiements)
         lignes.append(f"Total payé : {total} FCFA")
         return True, "\n".join(lignes)
 
     def total_caisse(self):
-        return f"Total encaissé par la bibliothèque : {self.depot.total_encaisse()} FCFA"
+        return (
+            f"Total encaissé par la bibliothèque : {self.depot.total_encaisse()} FCFA"
+        )
 
     # ---------- OPTION 7 : CATALOGUE ----------
 
@@ -395,7 +485,10 @@ class ControleurBibliotheque:
         if livre is None:
             return False, f"Aucun livre avec le code {code_livre}."
         nb = len(self.depot.exemplaires_du_livre(code_livre))
-        return True, f"{livre.code} {livre.titre} - {livre.auteur} ({nb} exemplaire(s) actuellement)"
+        return (
+            True,
+            f"{livre.code} {livre.titre} - {livre.auteur} ({nb} exemplaire(s) actuellement)",
+        )
 
     def ajouter_livre(self, titre, auteur, annee, prix, categorie, nb_exemplaires):
         """Ajoute un nouveau livre et ses exemplaires. Renvoie (ok, message)."""
@@ -408,7 +501,10 @@ class ControleurBibliotheque:
 
         # Un livre déjà au catalogue : on ajoute plutôt des exemplaires
         for existant in self.depot.chercher_livres(titre):
-            if existant.titre.lower() == titre.lower() and existant.auteur.lower() == auteur.lower():
+            if (
+                existant.titre.lower() == titre.lower()
+                and existant.auteur.lower() == auteur.lower()
+            ):
                 return False, (
                     f"Ce livre existe déjà ({existant.code}). "
                     "Utilisez « Ajouter des exemplaires » pour en ajouter."
@@ -438,7 +534,9 @@ class ControleurBibliotheque:
         resultats = []
         for etudiant in self.depot.tous_les_etudiants():
             if regles.abonnement_expire_bientot(etudiant.fin_abonnement, aujourdhui):
-                resultats.append((etudiant, (etudiant.fin_abonnement - aujourdhui).days))
+                resultats.append(
+                    (etudiant, (etudiant.fin_abonnement - aujourdhui).days)
+                )
         return resultats
 
     def _texte_carte(self, etudiant):
@@ -487,17 +585,25 @@ class ControleurBibliotheque:
         code_exemplaire = self._normaliser(code_exemplaire)
         exemplaire = self.depot.trouver_exemplaire(code_exemplaire)
         if exemplaire is None:
-            return False, f"Impossible : aucun exemplaire avec le code {code_exemplaire}."
+            return (
+                False,
+                f"Impossible : aucun exemplaire avec le code {code_exemplaire}.",
+            )
         livre = self.depot.trouver_livre(exemplaire.code_livre)
 
         emprunt = self.depot.emprunt_en_cours_de_l_exemplaire(code_exemplaire)
         if emprunt is None or emprunt.date_retour is not None:
-            return False, f"L'exemplaire {code_exemplaire} de « {livre.titre} » n'est pas emprunté."
+            return (
+                False,
+                f"L'exemplaire {code_exemplaire} de « {livre.titre} » n'est pas emprunté.",
+            )
 
         etudiant = self.depot.trouver_etudiant(emprunt.matricule)
         aujourdhui = date.today()
         raison = regles.raison_de_refus_prolongation(
-            emprunt, regles.abonnement_valide(etudiant.fin_abonnement, aujourdhui), aujourdhui
+            emprunt,
+            regles.abonnement_valide(etudiant.fin_abonnement, aujourdhui),
+            aujourdhui,
         )
         if raison is not None:
             return False, raison
@@ -520,7 +626,10 @@ class ControleurBibliotheque:
             return False, f"Impossible : aucun livre avec le code {code_livre}."
         disponibles = self.depot.exemplaires_disponibles(code_livre)
         if not disponibles:
-            return False, f"Impossible : Le livre « {livre.titre} » n'a plus d'exemplaire disponible."
+            return (
+                False,
+                f"Impossible : Le livre « {livre.titre} » n'a plus d'exemplaire disponible.",
+            )
 
         exemplaire = disponibles[0]
         self.depot.ajouter_lecture(exemplaire.code, date.today())
@@ -534,9 +643,15 @@ class ControleurBibliotheque:
         """Remet un exemplaire en rayon. Renvoie (ok, message)."""
         code_exemplaire = self._normaliser(code_exemplaire)
         if self.depot.lecture_en_cours_de(code_exemplaire) is None:
-            return False, f"L'exemplaire {code_exemplaire} n'est pas en lecture sur place."
+            return (
+                False,
+                f"L'exemplaire {code_exemplaire} n'est pas en lecture sur place.",
+            )
         self.depot.terminer_lecture(code_exemplaire, date.today())
-        return True, f"Exemplaire {code_exemplaire} remis en rayon : il est de nouveau disponible."
+        return (
+            True,
+            f"Exemplaire {code_exemplaire} remis en rayon : il est de nouveau disponible.",
+        )
 
     def lister_lectures(self):
         """Renvoie une liste de tuples (code_exemplaire, titre)."""

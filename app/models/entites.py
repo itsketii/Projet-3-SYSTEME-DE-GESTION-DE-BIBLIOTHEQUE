@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import date
-from typing import Optional
 
 
 @dataclass
@@ -28,6 +27,7 @@ class Etudiant:
     telephone: str         # pour le contacter en cas de retard
     email: str             # facultatif ("" si absent)
     fin_abonnement: date   # dernier jour de l'abonnement
+    incidents: int = 0     # livres abîmés ou perdus depuis le dernier abonnement
 
 
 @dataclass

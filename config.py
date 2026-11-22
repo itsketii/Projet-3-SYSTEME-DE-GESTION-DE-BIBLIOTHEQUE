@@ -37,3 +37,5 @@ RAPPEL_EXPIRATION_JOURS = 7          # prévenir les membres dont l'abonnement e
 
 PROLONGATION_JOURS = 7               # durée d'une prolongation de prêt
 PROLONGATIONS_MAX = 1                # nombre de prolongations par emprunt
+
+INCIDENTS_MAX = 3                    # livres abîmés ou perdus avant l'annulation de l'abonnement

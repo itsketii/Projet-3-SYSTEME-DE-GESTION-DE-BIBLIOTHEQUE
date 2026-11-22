@@ -36,7 +36,8 @@ class DepotSQLite:
                 categorie       TEXT NOT NULL,
                 telephone       TEXT NOT NULL,
                 email           TEXT NOT NULL,
-                fin_abonnement  TEXT NOT NULL
+                fin_abonnement  TEXT NOT NULL,
+                incidents       INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS emprunts (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -197,13 +198,13 @@ class DepotSQLite:
 
     def trouver_etudiant(self, matricule):
         ligne = self.connexion.execute(
-            "SELECT matricule, nom, categorie, telephone, email, fin_abonnement "
+            "SELECT matricule, nom, categorie, telephone, email, fin_abonnement, incidents "
             "FROM etudiants WHERE matricule = ?",
             (matricule,),
         ).fetchone()
         if ligne is None:
             return None
-        return Etudiant(ligne[0], ligne[1], ligne[2], ligne[3], ligne[4], date.fromisoformat(ligne[5]))
+        return Etudiant(ligne[0], ligne[1], ligne[2], ligne[3], ligne[4], date.fromisoformat(ligne[5]), ligne[6])
 
     def ajouter_etudiant(self, etudiant):
         self.connexion.execute(
@@ -348,7 +349,7 @@ class DepotSQLite:
     def paiements_de(self, matricule):
         lignes = self.connexion.execute(
             "SELECT id, matricule, motif, montant, date, mode FROM paiements "
-            "WHERE matricule = ? ORDER BY date",
+            "WHERE matricule = ? ORDER BY date, id",
             (matricule,),
         ).fetchall()
         return [
@@ -390,11 +391,11 @@ class DepotSQLite:
 
     def tous_les_etudiants(self):
         lignes = self.connexion.execute(
-            "SELECT matricule, nom, categorie, telephone, email, fin_abonnement "
+            "SELECT matricule, nom, categorie, telephone, email, fin_abonnement, incidents "
             "FROM etudiants ORDER BY fin_abonnement"
         ).fetchall()
         return [
-            Etudiant(ligne[0], ligne[1], ligne[2], ligne[3], ligne[4], date.fromisoformat(ligne[5]))
+            Etudiant(ligne[0], ligne[1], ligne[2], ligne[3], ligne[4], date.fromisoformat(ligne[5]), ligne[6])
             for ligne in lignes
         ]
 
@@ -444,5 +445,32 @@ class DepotSQLite:
         self.connexion.execute(
             "UPDATE lectures SET date_fin = date_lecture WHERE date_fin IS NULL AND date_lecture < ?",
             (jour.isoformat(),),
+        )
+        self.connexion.commit()
+
+
+    # ---------- INCIDENTS ET SUSPENSION ----------
+    def ajouter_incident(self, matricule):
+        """Compte un livre abîmé ou perdu. Renvoie le nombre d'incidents du membre."""
+        self.connexion.execute(
+            "UPDATE etudiants SET incidents = incidents + 1 WHERE matricule = ?",
+            (matricule,),
+        )
+        self.connexion.commit()
+        return self.connexion.execute(
+            "SELECT incidents FROM etudiants WHERE matricule = ?", (matricule,)
+        ).fetchone()[0]
+
+    def annuler_abonnement(self, matricule, hier):
+        self.connexion.execute(
+            "UPDATE etudiants SET fin_abonnement = ? WHERE matricule = ?",
+            (hier.isoformat(), matricule),
+        )
+        self.connexion.commit()
+
+    def reinitialiser_incidents(self, matricule):
+        self.connexion.execute(
+            "UPDATE etudiants SET incidents = 0 WHERE matricule = ?",
+            (matricule,),
         )
         self.connexion.commit()
